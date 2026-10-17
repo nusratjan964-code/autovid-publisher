@@ -2,12 +2,12 @@
 
 export const AVAILABLE_PLATFORMS = [
   {
-    id: 'insta',
-    name: 'Instagram Reels',
-    icon: 'instagram',
-    color: '#E1306C',
-    description: 'Auto-publish 9:16 vertical reels to your Instagram professional or creator feed.',
-    authScopes: ['instagram_basic', 'instagram_content_publish', 'pages_read_engagement']
+    id: 'facebook',
+    name: 'Facebook Reels & Page',
+    icon: 'facebook',
+    color: '#1877F2',
+    description: 'Auto-publish Reels & feed posts to your Facebook Business Page via Meta Graph API.',
+    authScopes: ['pages_manage_posts', 'publish_video', 'pages_read_engagement']
   },
   {
     id: 'youtube',
@@ -18,20 +18,20 @@ export const AVAILABLE_PLATFORMS = [
     authScopes: ['https://www.googleapis.com/auth/youtube.upload', 'youtube.readonly']
   },
   {
+    id: 'insta',
+    name: 'Instagram Reels',
+    icon: 'instagram',
+    color: '#E1306C',
+    description: 'Auto-publish 9:16 vertical reels to your Instagram professional or creator feed.',
+    authScopes: ['instagram_basic', 'instagram_content_publish', 'pages_read_engagement']
+  },
+  {
     id: 'tiktok',
     name: 'TikTok',
     icon: 'video',
     color: '#000000',
     description: 'Direct posting to TikTok video creator feed with sound and caption tags.',
     authScopes: ['video.upload', 'video.publish', 'user.info.basic']
-  },
-  {
-    id: 'facebook',
-    name: 'Facebook Reels',
-    icon: 'facebook',
-    color: '#1877F2',
-    description: 'Publish high-reach Reels to your Facebook business page or creator profile.',
-    authScopes: ['pages_manage_posts', 'publish_video']
   },
   {
     id: 'linkedin',
@@ -53,7 +53,77 @@ export const AVAILABLE_PLATFORMS = [
 
 export class SocialManagerService {
   /**
-   * Connect a specific platform with genuine user handle
+   * Verify Facebook Page connection via serverless API
+   */
+  static async checkFacebookStatus(pageId = '', token = '') {
+    try {
+      const res = await fetch('/api/facebook/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, token })
+      });
+      return await res.json();
+    } catch (err) {
+      return {
+        success: false,
+        connected: false,
+        status: 'NETWORK_ERROR',
+        error: err.message,
+        message: `Failed to contact Facebook API server: ${err.message}`
+      };
+    }
+  }
+
+  /**
+   * Connect Facebook Page with verified details
+   */
+  static connectFacebookPage(project, { pageId, pageName, token = '', handle = '' }) {
+    let account = project.socialAccounts.find(a => a.id === 'facebook');
+    const cleanHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${(pageName || 'facebookpage').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+
+    if (!account) {
+      account = {
+        id: 'facebook',
+        name: pageName || 'Facebook Page',
+        icon: 'facebook',
+        color: '#1877F2',
+        handle: cleanHandle,
+        pageId: pageId || '1309863422219233',
+        pageName: pageName || 'Chiku bd',
+        tokenConfigured: !!token,
+        token: token || '',
+        connected: true,
+        active: true,
+        verified: true,
+        followers: 'Page Connected',
+        connectedAt: new Date().toISOString(),
+        lastPost: 'None'
+      };
+      project.socialAccounts.push(account);
+    } else {
+      account.connected = true;
+      account.active = true;
+      account.verified = true;
+      account.pageId = pageId || account.pageId || '1309863422219233';
+      account.pageName = pageName || account.pageName || 'Chiku bd';
+      account.handle = cleanHandle;
+      if (token) {
+        account.token = token;
+        account.tokenConfigured = true;
+      }
+      account.followers = 'Page Connected';
+      account.connectedAt = new Date().toISOString();
+    }
+
+    if (!project.scheduleSettings.targetPlatforms.includes('facebook')) {
+      project.scheduleSettings.targetPlatforms.push('facebook');
+    }
+
+    return account;
+  }
+
+  /**
+   * Connect a specific platform with user handle
    */
   static connectPlatform(project, platformId, customHandle = '') {
     const platformDef = AVAILABLE_PLATFORMS.find(p => p.id === platformId);
@@ -101,6 +171,10 @@ export class SocialManagerService {
       account.active = false;
       account.handle = '';
       account.followers = '0';
+      if (platformId === 'facebook') {
+        account.token = '';
+        account.tokenConfigured = false;
+      }
     }
     project.scheduleSettings.targetPlatforms = project.scheduleSettings.targetPlatforms.filter(id => id !== platformId);
     return account;

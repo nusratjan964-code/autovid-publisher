@@ -663,9 +663,12 @@ class OmniFlowApp {
 
   renderVideoCard(video) {
     let badgeClass = 'badge-neutral';
-    if (video.status === 'published') badgeClass = 'badge-success';
-    if (video.status === 'scheduled') badgeClass = 'badge-warning';
-    if (video.status === 'ready') badgeClass = 'badge-primary';
+    const s = (video.status || '').toLowerCase();
+    if (s === 'published') badgeClass = 'badge-success';
+    else if (s === 'scheduled' || s === 'pending') badgeClass = 'badge-warning';
+    else if (s === 'processing' || s === 'publishing') badgeClass = 'badge-primary';
+    else if (s === 'failed') badgeClass = 'badge-danger';
+    else if (s === 'ready') badgeClass = 'badge-primary';
 
     return `
       <div class="video-card" data-video-id="${video.id}">
@@ -683,11 +686,17 @@ class OmniFlowApp {
 
         <div class="video-body">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span class="badge ${badgeClass}">${video.status.toUpperCase()}</span>
+            <span class="badge ${badgeClass}">${(video.status || 'READY').toUpperCase()}</span>
             <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">${video.size || 'Video'}</span>
           </div>
 
           <div class="video-title" title="${video.title}">${video.title}</div>
+
+          ${video.error ? `
+            <div style="background:rgba(239, 68, 68, 0.08); border-left:3px solid var(--danger); padding:6px 10px; font-size:0.76rem; color:var(--danger); border-radius:4px; margin-bottom:8px;">
+              <strong>Error:</strong> ${video.error}
+            </div>
+          ` : ''}
 
           <div class="caption-preview-box ${!video.caption ? 'empty' : ''}">
             ${video.caption 
@@ -792,6 +801,13 @@ class OmniFlowApp {
                     </div>
                   </div>
                 </div>
+
+                ${platformDef.id === 'facebook' && account.connected ? `
+                  <div style="margin-top:10px; padding:6px 10px; background:rgba(24, 119, 242, 0.06); border:1px solid rgba(24, 119, 242, 0.15); border-radius:6px; font-size:0.75rem; color:#1877F2; display:flex; justify-content:space-between; align-items:center;">
+                    <span>Page ID: <strong>${account.pageId || '1309863422219233'}</strong></span>
+                    <span style="font-weight:600;">Meta Graph API v21.0</span>
+                  </div>
+                ` : ''}
               </div>
 
               <div class="platform-footer">
@@ -805,9 +821,17 @@ class OmniFlowApp {
                       ${account.active ? 'Active' : 'Paused'}
                     </span>
                   </div>
-                  <button class="btn btn-outline btn-sm btn-disconnect-platform" data-platform-id="${platformDef.id}" style="color:var(--danger); border-color:#fecaca;">
-                    Disconnect
-                  </button>
+                  <div style="display:flex; gap:6px;">
+                    ${platformDef.id === 'facebook' ? `
+                      <button class="btn btn-outline btn-sm btn-connect-platform" data-platform-id="facebook" style="border-color:#1877F2; color:#1877F2;" title="Verify or Test Connection">
+                        <i data-lucide="settings-2"></i>
+                        <span>Configure / Test</span>
+                      </button>
+                    ` : ''}
+                    <button class="btn btn-outline btn-sm btn-disconnect-platform" data-platform-id="${platformDef.id}" style="color:var(--danger); border-color:#fecaca;">
+                      Disconnect
+                    </button>
+                  </div>
                 ` : `
                   <button class="btn btn-primary btn-sm btn-connect-platform" data-platform-id="${platformDef.id}" style="width:100%; ${platformDef.id === 'youtube' ? 'background:#FF0000; border-color:#FF0000;' : ''}">
                     <i data-lucide="${platformDef.id === 'youtube' ? 'play-circle' : 'link'}"></i>
@@ -1232,6 +1256,11 @@ class OmniFlowApp {
       return;
     }
 
+    if (platformId === 'facebook') {
+      this.openFacebookConnectModal(platform);
+      return;
+    }
+
     this.openModal(`
       <div class="modal-backdrop">
         <div class="modal-card">
@@ -1282,6 +1311,232 @@ class OmniFlowApp {
       storage.saveState();
       this.closeModal();
       this.showToast(`Connected ${platform.name}!`, 'success');
+      this.render();
+    });
+  }
+
+  // --- FACEBOOK PAGE META GRAPH API MODAL ---
+  openFacebookConnectModal(platform) {
+    const project = storage.getActiveProject();
+    let account = project.socialAccounts.find(a => a.id === 'facebook');
+    const defaultPageId = account?.pageId || '1309863422219233';
+    const defaultPageName = account?.pageName || account?.name || 'Chiku bd';
+    const defaultHandle = account?.handle || '@chikubd';
+    const hasToken = !!(account?.token || account?.tokenConfigured);
+
+    this.openModal(`
+      <div class="modal-backdrop">
+        <div class="modal-card" style="max-width:560px;">
+          <div class="modal-header">
+            <h3 class="modal-title" style="display:flex; align-items:center; gap:10px;">
+              <span style="width:34px; height:34px; border-radius:var(--radius-sm); background:#1877F2; color:white; display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="facebook"></i>
+              </span>
+              Connect Facebook Reels & Page
+            </h3>
+            <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
+          </div>
+          <div class="modal-body">
+            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:16px; margin-bottom:18px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                  <div style="font-weight:700; color:var(--text-primary); font-size:1.02rem; margin-bottom:2px;">
+                    Target Page: <span id="fb-display-page-name">${defaultPageName}</span>
+                  </div>
+                  <div style="font-size:0.82rem; color:var(--text-muted);">
+                    ID: <code style="background:var(--bg-card); padding:2px 6px; border-radius:4px; font-weight:600;">${defaultPageId}</code> &bull; Handle: <span style="font-weight:600;">${defaultHandle}</span>
+                  </div>
+                </div>
+                <span class="badge ${account?.connected ? 'badge-success' : 'badge-neutral'}" id="fb-live-badge">
+                  ${account?.connected ? 'Connected' : 'Not Linked'}
+                </span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <span><strong>Facebook Page Access Token</strong></span>
+                <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" style="font-size:0.78rem; color:#1877F2; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
+                  <span>Get Token from Graph Explorer</span>
+                  <i data-lucide="external-link" style="width:12px; height:12px;"></i>
+                </a>
+              </label>
+              <textarea class="form-input" id="fb-token-input" rows="3" style="font-family:monospace; font-size:0.82rem; resize:vertical;" placeholder="${hasToken ? '•••••••••••••••••••••••• (টোকেন সংরক্ষিত আছে — পরিবর্তন করতে নতুন টোকেন পেস্ট করুন)' : 'এখানে আপনার Facebook Page Access Token পেস্ট করুন (starts with EAAT...)'}">${account?.token || ''}</textarea>
+              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:6px; line-height:1.4;">
+                প্রয়োজনীয় পারমিশন: <code>pages_manage_posts</code>, <code>publish_video</code>, <code>pages_read_engagement</code>।
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" style="display:flex; justify-content:space-between;">
+                <span>Facebook Page ID (বাধ্যতামূলক নয় - স্বয়ংক্রিয় সনাক্ত হবে)</span>
+                <span style="font-size:0.75rem; color:var(--text-muted);">Numeric ID</span>
+              </label>
+              <input type="text" class="form-input" id="fb-page-id-input" value="${defaultPageId}" placeholder="e.g. 1309863422219233" />
+            </div>
+
+            <div id="fb-verification-results" style="display:none; margin-bottom:16px;"></div>
+
+            <div style="display:flex; gap:10px; margin-top:10px;">
+              <button class="btn btn-outline btn-sm" id="btn-fb-verify" style="flex:1;">
+                <i data-lucide="shield-check"></i>
+                <span>Verify Token & Permissions</span>
+              </button>
+              <button class="btn btn-outline btn-sm" id="btn-fb-test-post" style="flex:1; border-color:rgba(24, 119, 242, 0.4); color:#1877F2;">
+                <i data-lucide="send"></i>
+                <span>Publish Test Post</span>
+              </button>
+            </div>
+          </div>
+          <div class="modal-footer" style="display:flex; justify-content:space-between;">
+            <button class="btn btn-outline btn-close-modal">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-fb-config" style="background:#1877F2; border-color:#1877F2;">
+              <i data-lucide="zap"></i>
+              <span>Connect with Access Token</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `);
+    this.refreshIcons();
+
+    // Verify token button
+    document.getElementById('btn-fb-verify').addEventListener('click', async () => {
+      const pageId = document.getElementById('fb-page-id-input').value.trim();
+      const tokenInput = document.getElementById('fb-token-input').value.trim();
+      const token = tokenInput || account?.token || '';
+      const resultBox = document.getElementById('fb-verification-results');
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `
+        <div style="background:var(--bg-subtle); padding:12px; border-radius:var(--radius-md); font-size:0.84rem; display:flex; align-items:center; gap:8px;">
+          <span>Contacting Meta Graph API v21.0...</span>
+        </div>
+      `;
+
+      const status = await SocialManagerService.checkFacebookStatus(pageId, token);
+
+      if (status.success && status.connected) {
+        resultBox.innerHTML = `
+          <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem; color:var(--text-primary);">
+            <div style="font-weight:700; color:#10B981; margin-bottom:4px;">✅ Live Graph API Connection Verified</div>
+            <div>Page: <strong>${status.pageName}</strong> (ID: ${status.pageId})</div>
+            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">
+              Permissions: ${status.scopes?.join(', ') || 'All verified'}
+            </div>
+          </div>
+        `;
+        document.getElementById('fb-display-page-name').textContent = status.pageName;
+        document.getElementById('fb-page-id-input').value = status.pageId;
+        document.getElementById('fb-live-badge').className = 'badge badge-success';
+        document.getElementById('fb-live-badge').textContent = 'Verified Active';
+      } else {
+        resultBox.innerHTML = `
+          <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem; color:var(--text-primary);">
+            <div style="font-weight:700; color:#EF4444; margin-bottom:4px;">⚠️ Meta Graph API Status: ${status.status || 'Failed'}</div>
+            <div style="color:var(--text-secondary); margin-bottom:4px;">${status.message || status.error}</div>
+            ${status.errorCode ? `<div style="font-size:0.75rem; color:var(--text-muted);">Error Code: ${status.errorCode} (Subcode: ${status.errorSubcode || 'N/A'})</div>` : ''}
+          </div>
+        `;
+        document.getElementById('fb-live-badge').className = 'badge badge-danger';
+        document.getElementById('fb-live-badge').textContent = status.status || 'Action Required';
+      }
+    });
+
+    // Send Test Post Button (With approval prompt)
+    document.getElementById('btn-fb-test-post').addEventListener('click', async () => {
+      const pageId = document.getElementById('fb-page-id-input').value.trim() || defaultPageId;
+      const tokenInput = document.getElementById('fb-token-input').value.trim();
+      const token = tokenInput || account?.token || '';
+
+      const approved = window.confirm(`Approve Test Post:\n\nDo you approve publishing a real test text post to Facebook Page "${defaultPageName}" (ID: ${pageId})?\n\nThis will make a live Graph API request.`);
+      if (!approved) return;
+
+      const resultBox = document.getElementById('fb-verification-results');
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `
+        <div style="background:var(--bg-subtle); padding:12px; border-radius:var(--radius-md); font-size:0.84rem; display:flex; align-items:center; gap:8px;">
+          <span>Publishing test text post to Facebook Page...</span>
+        </div>
+      `;
+
+      try {
+        const testRes = await SchedulerService.publishTestPost(project, {
+          pageId,
+          token,
+          message: `AutoVid Publisher Test Post — ${new Date().toLocaleString()}`
+        });
+
+        if (testRes.success) {
+          resultBox.innerHTML = `
+            <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem;">
+              <div style="font-weight:700; color:#10B981; margin-bottom:4px;">🎉 Test Post Published Successfully!</div>
+              <div>Post ID: <code>${testRes.postId}</code></div>
+              <div style="margin-top:6px;">
+                <a href="${testRes.postUrl}" target="_blank" style="color:#1877F2; text-decoration:underline; font-weight:600;">
+                  View Live Post on Facebook &rarr;
+                </a>
+              </div>
+            </div>
+          `;
+          this.showToast('Test post published to Facebook!', 'success');
+        } else {
+          resultBox.innerHTML = `
+            <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem;">
+              <div style="font-weight:700; color:#EF4444; margin-bottom:4px;">❌ Test Post Failed</div>
+              <div style="color:var(--text-secondary);">${testRes.message || testRes.error}</div>
+            </div>
+          `;
+          this.showToast(testRes.message || 'Test post failed', 'error');
+        }
+      } catch (err) {
+        resultBox.innerHTML = `
+          <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem;">
+            <div style="font-weight:700; color:#EF4444; margin-bottom:4px;">❌ Network Error</div>
+            <div style="color:var(--text-secondary);">${err.message}</div>
+          </div>
+        `;
+      }
+    });
+
+    // Save and Connect Page with Auto-Verification
+    document.getElementById('btn-save-fb-config').addEventListener('click', async () => {
+      const pageId = document.getElementById('fb-page-id-input').value.trim();
+      const tokenInput = document.getElementById('fb-token-input').value.trim();
+      const token = tokenInput || account?.token || '';
+
+      if (!token) {
+        this.showToast('অনুগ্রহ করে একটি Facebook Page Access Token দিন।', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('btn-save-fb-config');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = `<span>যাচাই করা হচ্ছে...</span>`;
+      btn.disabled = true;
+
+      const status = await SocialManagerService.checkFacebookStatus(pageId, token);
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+
+      const finalPageId = status.pageId || pageId || '1309863422219233';
+      const finalPageName = status.pageName || defaultPageName;
+
+      SocialManagerService.connectFacebookPage(project, {
+        pageId: finalPageId,
+        pageName: finalPageName,
+        token: token,
+        handle: `@${finalPageName.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+      });
+
+      storage.saveState();
+      this.closeModal();
+
+      if (status.success && status.connected) {
+        this.showToast(`🎉 Facebook Page "${finalPageName}" সফলভাবে সংযুক্ত হয়েছে!`, 'success');
+      } else {
+        this.showToast(`Facebook সংযুক্ত হয়েছে (টোকেন যাচাই সতর্কবার্তা: ${status.message || 'অনুমতি চেক করুন'})`, 'warning');
+      }
+
       this.render();
     });
   }
