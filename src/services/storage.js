@@ -1,0 +1,213 @@
+// LocalStorage & State Management with Zero Fake Data
+const STORAGE_KEY = 'omniflow_studio_clean_state_v2';
+
+const emptyInitialState = {
+  currentUser: {
+    id: null,
+    name: '',
+    email: '',
+    avatar: '',
+    isLoggedIn: false
+  },
+  activeProjectId: null,
+  projects: []
+};
+
+class StorageService {
+  constructor() {
+    this.state = this.loadState();
+  }
+
+  loadState() {
+    try {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (data) {
+        return JSON.parse(data);
+      }
+    } catch (e) {
+      console.warn('Could not load from localStorage, initializing clean state', e);
+    }
+    this.saveState(emptyInitialState);
+    return JSON.parse(JSON.stringify(emptyInitialState));
+  }
+
+  saveState(stateToSave = null) {
+    if (stateToSave) {
+      this.state = stateToSave;
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+    } catch (e) {
+      console.error('Failed to save to localStorage', e);
+    }
+  }
+
+  getState() {
+    return this.state;
+  }
+
+  getCurrentUser() {
+    return this.state.currentUser;
+  }
+
+  loginUser({ name, email }) {
+    this.state.currentUser = {
+      id: 'usr_' + Date.now(),
+      name: name.trim() || 'Creator',
+      email: email.trim() || 'creator@example.com',
+      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name || 'Creator')}&backgroundColor=4f46e5&textColor=ffffff`,
+      isLoggedIn: true
+    };
+    this.saveState();
+    return this.state.currentUser;
+  }
+
+  logoutUser() {
+    this.state.currentUser = {
+      id: null,
+      name: '',
+      email: '',
+      avatar: '',
+      isLoggedIn: false
+    };
+    this.saveState();
+  }
+
+  getActiveProject() {
+    if (!this.state.activeProjectId || this.state.projects.length === 0) {
+      return null;
+    }
+    return this.state.projects.find(p => p.id === this.state.activeProjectId) || this.state.projects[0];
+  }
+
+  setActiveProjectId(projectId) {
+    if (this.state.projects.some(p => p.id === projectId)) {
+      this.state.activeProjectId = projectId;
+      this.saveState();
+    }
+  }
+
+  createProject({ name, niche, description, targetPlatforms = ['insta', 'youtube', 'tiktok'] }) {
+    const id = 'proj_' + Date.now();
+    const newProject = {
+      id,
+      name: name.trim() || 'My Video Project',
+      niche: niche || 'General Content',
+      description: description ? description.trim() : '',
+      createdAt: new Date().toISOString(),
+      driveConfig: {
+        folderUrl: '',
+        folderName: '',
+        lastSync: null,
+        status: 'unlinked',
+        totalScanned: 0
+      },
+      socialAccounts: [
+        { id: 'insta', name: 'Instagram Reels', icon: 'instagram', color: '#E1306C', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
+        { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
+        { id: 'tiktok', name: 'TikTok', icon: 'video', color: '#000000', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
+        { id: 'facebook', name: 'Facebook Reels', icon: 'facebook', color: '#1877F2', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
+        { id: 'linkedin', name: 'LinkedIn Video', icon: 'linkedin', color: '#0A66C2', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
+        { id: 'twitter', name: 'X / Twitter', icon: 'twitter', color: '#0f172a', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' }
+      ],
+      aiSettings: {
+        provider: 'gemini',
+        apiKey: '',
+        tone: 'Viral & High Energy',
+        hashtagCount: 6,
+        customPrompt: 'Create a high-retention hook in the first line, 2 engaging body lines, and trending hashtags for high organic reach.',
+        callToAction: 'Follow for more daily content!',
+        autoGenerateOnSync: true
+      },
+      scheduleSettings: {
+        enabled: true,
+        frequency: 1,
+        preferredTime: '18:00',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Dhaka',
+        postingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        targetPlatforms: targetPlatforms
+      },
+      videos: [],
+      logs: []
+    };
+
+    this.state.projects.push(newProject);
+    this.state.activeProjectId = id;
+    this.saveState();
+    return newProject;
+  }
+
+  updateActiveProject(partialData) {
+    const project = this.getActiveProject();
+    if (!project) return null;
+    Object.assign(project, partialData);
+    this.saveState();
+    return project;
+  }
+
+  deleteProject(projectId) {
+    this.state.projects = this.state.projects.filter(p => p.id !== projectId);
+    if (this.state.activeProjectId === projectId) {
+      this.state.activeProjectId = this.state.projects.length > 0 ? this.state.projects[0].id : null;
+    }
+    this.saveState();
+  }
+
+  addVideoToActiveProject(videoData) {
+    const project = this.getActiveProject();
+    if (!project) return null;
+    const newVideo = {
+      id: 'vid_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      status: 'ready',
+      scheduledDate: null,
+      publishedAt: null,
+      caption: '',
+      hook: '',
+      platforms: project.scheduleSettings.targetPlatforms || [],
+      ...videoData
+    };
+    project.videos.unshift(newVideo);
+    this.saveState();
+    return newVideo;
+  }
+
+  updateVideo(videoId, partialData) {
+    const project = this.getActiveProject();
+    if (!project) return null;
+    const video = project.videos.find(v => v.id === videoId);
+    if (video) {
+      Object.assign(video, partialData);
+      this.saveState();
+    }
+    return video;
+  }
+
+  deleteVideo(videoId) {
+    const project = this.getActiveProject();
+    if (!project) return;
+    project.videos = project.videos.filter(v => v.id !== videoId);
+    this.saveState();
+  }
+
+  addLog(logItem) {
+    const project = this.getActiveProject();
+    if (!project) return;
+    const log = {
+      id: 'log_' + Date.now(),
+      timestamp: new Date().toLocaleString(),
+      ...logItem
+    };
+    if (!project.logs) project.logs = [];
+    project.logs.unshift(log);
+    this.saveState();
+    return log;
+  }
+
+  resetAllData() {
+    this.state = JSON.parse(JSON.stringify(emptyInitialState));
+    this.saveState();
+    return this.state;
+  }
+}
+
+export const storage = new StorageService();
