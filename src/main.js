@@ -5,6 +5,7 @@ import { DriveSyncService } from './services/driveSync.js';
 import { SocialManagerService, AVAILABLE_PLATFORMS } from './services/socialManager.js';
 import { AICaptionService } from './services/aiCaption.js';
 import { SchedulerService } from './services/scheduler.js';
+import { GoogleAuthService, GOOGLE_CONFIG } from './services/googleAuth.js';
 
 class OmniFlowApp {
   constructor() {
@@ -754,9 +755,13 @@ class OmniFlowApp {
               <div>
                 <div class="platform-header">
                   <div style="display:flex; align-items:center; gap:12px;">
-                    <div class="platform-icon-wrap" style="background:${platformDef.color};">
-                      <i data-lucide="${platformDef.icon}"></i>
-                    </div>
+                    ${account.avatar ? `
+                      <img src="${account.avatar}" style="width:44px; height:44px; border-radius:var(--radius-md); object-fit:cover; border:2px solid #fee2e2;" alt="Channel Avatar" />
+                    ` : `
+                      <div class="platform-icon-wrap" style="background:${platformDef.color};">
+                        <i data-lucide="${platformDef.icon}"></i>
+                      </div>
+                    `}
                     <div>
                       <div class="platform-name">${platformDef.name}</div>
                       <div class="platform-handle">${account.connected && account.handle ? account.handle : 'Not linked'}</div>
@@ -777,8 +782,8 @@ class OmniFlowApp {
                     <div class="platform-meta-value">${account.connected ? 'Ready' : 'Unlinked'}</div>
                   </div>
                   <div>
-                    <div class="platform-meta-item">Last Dispatch</div>
-                    <div class="platform-meta-value">${account.lastPost || 'None'}</div>
+                    <div class="platform-meta-item">${platformDef.id === 'youtube' ? 'Subscribers' : 'Audience'}</div>
+                    <div class="platform-meta-value">${account.connected ? (account.followers || 'Active') : '--'}</div>
                   </div>
                   <div>
                     <div class="platform-meta-item">Auto-Posting</div>
@@ -804,9 +809,9 @@ class OmniFlowApp {
                     Disconnect
                   </button>
                 ` : `
-                  <button class="btn btn-primary btn-sm btn-connect-platform" data-platform-id="${platformDef.id}" style="width:100%;">
-                    <i data-lucide="link"></i>
-                    <span>1-Click Connect</span>
+                  <button class="btn btn-primary btn-sm btn-connect-platform" data-platform-id="${platformDef.id}" style="width:100%; ${platformDef.id === 'youtube' ? 'background:#FF0000; border-color:#FF0000;' : ''}">
+                    <i data-lucide="${platformDef.id === 'youtube' ? 'play-circle' : 'link'}"></i>
+                    <span>${platformDef.id === 'youtube' ? 'Connect with Google' : '1-Click Connect'}</span>
                   </button>
                 `}
               </div>
@@ -1222,6 +1227,11 @@ class OmniFlowApp {
     const platform = AVAILABLE_PLATFORMS.find(p => p.id === platformId);
     if (!platform) return;
 
+    if (platformId === 'youtube') {
+      this.openYouTubeOAuthModal(platform);
+      return;
+    }
+
     this.openModal(`
       <div class="modal-backdrop">
         <div class="modal-card">
@@ -1272,6 +1282,101 @@ class OmniFlowApp {
       storage.saveState();
       this.closeModal();
       this.showToast(`Connected ${platform.name}!`, 'success');
+      this.render();
+    });
+  }
+
+  // --- GOOGLE OAUTH 2.0 YOUTUBE MODAL ---
+  openYouTubeOAuthModal(platform) {
+    const project = storage.getActiveProject();
+    this.openModal(`
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3 class="modal-title" style="display:flex; align-items:center; gap:10px;">
+              <span style="width:32px; height:32px; border-radius:var(--radius-sm); background:#FF0000; color:white; display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="youtube"></i>
+              </span>
+              Connect YouTube Channel
+            </h3>
+            <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
+          </div>
+          <div class="modal-body">
+            <div style="text-align:center; padding:10px 0 18px;">
+              <div style="width:60px; height:60px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; border:2px solid #fca5a5;">
+                <i data-lucide="youtube" style="width:34px; height:34px;"></i>
+              </div>
+              <h4 style="font-size:1.2rem; font-weight:800; color:var(--text-primary);">Google & YouTube OAuth 2.0</h4>
+              <p style="font-size:0.86rem; color:var(--text-muted); margin-top:4px;">
+                Connect your YouTube channel in 1 step using your Google OAuth Client ID.
+              </p>
+            </div>
+
+            <div style="background:var(--bg-subtle); padding:12px 14px; border-radius:var(--radius-md); font-size:0.8rem; margin-bottom:16px; border:1px solid var(--border-light);">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="font-weight:700; color:var(--text-primary);">Google Client ID:</span>
+                <span class="badge badge-success">Configured</span>
+              </div>
+              <code style="word-break:break-all; font-size:0.75rem; color:var(--primary); font-family:var(--font-mono);">${GOOGLE_CONFIG.clientId}</code>
+            </div>
+
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:var(--radius-md); padding:12px 14px; font-size:0.82rem; color:#166534; margin-bottom:18px;">
+              <strong><i data-lucide="check-shield"></i> Official YouTube Permissions:</strong>
+              <div style="margin-top:4px; line-height:1.45;">
+                • Upload videos directly as YouTube Shorts<br>
+                • Automatically retrieve your channel name, avatar, and subscribers
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-lg" id="btn-trigger-google-oauth" style="width:100%; display:flex; align-items:center; justify-content:center; gap:10px; background:#FF0000; border-color:#FF0000; font-weight:700;">
+              <i data-lucide="play-circle"></i>
+              <span>1-Step Connect YouTube with Google</span>
+            </button>
+
+            <div style="margin:16px 0; display:flex; align-items:center; gap:10px;">
+              <div style="flex:1; height:1px; background:var(--border-light);"></div>
+              <span style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">or link handle manually</span>
+              <div style="flex:1; height:1px; background:var(--border-light);"></div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:0;">
+              <input type="text" class="form-input" id="manual-yt-handle" placeholder="Enter channel name or @handle manually" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline btn-close-modal">Cancel</button>
+            <button class="btn btn-outline" id="btn-save-manual-yt">Save Handle</button>
+          </div>
+        </div>
+      </div>
+    `);
+
+    document.getElementById('btn-trigger-google-oauth').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-trigger-google-oauth');
+      btn.disabled = true;
+      btn.innerHTML = 'Connecting to Google OAuth...';
+
+      try {
+        const result = await GoogleAuthService.connectYouTubeChannel(project);
+        this.closeModal();
+        this.showToast(`Connected YouTube: ${result.channel?.title || 'YouTube Channel'}!`, 'success');
+        this.render();
+      } catch (err) {
+        console.warn('Google OAuth error:', err);
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="play-circle"></i> Try Again with Google';
+        createIcons({ icons });
+
+        alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nNote: If you see origin_mismatch, make sure http://localhost:5173 is added to Authorized JavaScript Origins in your Google Cloud Console.`);
+      }
+    });
+
+    document.getElementById('btn-save-manual-yt').addEventListener('click', () => {
+      const handle = document.getElementById('manual-yt-handle').value.trim();
+      SocialManagerService.connectPlatform(project, 'youtube', handle || '@mychannel');
+      storage.saveState();
+      this.closeModal();
+      this.showToast('YouTube connected!', 'success');
       this.render();
     });
   }
