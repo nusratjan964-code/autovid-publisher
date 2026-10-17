@@ -1,22 +1,20 @@
 // Google OAuth 2.0 & YouTube Data API v3 Service
 import { storage } from './storage.js';
 
-export const GOOGLE_CONFIG = {
-  // Loaded securely from .env.local (ignored by Git for security) or localStorage
-  clientId: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
-            (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || '',
-  clientSecret: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) || 
-                (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_secret')) || '',
-  scopes: [
-    'https://www.googleapis.com/auth/youtube.upload',
-    'https://www.googleapis.com/auth/youtube.readonly',
-    'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/userinfo.email'
-  ].join(' ')
-};
-
 export class GoogleAuthService {
   static tokenClient = null;
+
+  static getClientId() {
+    return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
+           (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
+           '';
+  }
+
+  static setClientId(id) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('omni_google_client_id', (id || '').trim());
+    }
+  }
 
   static isGoogleLoaded() {
     return typeof window !== 'undefined' && window.google?.accounts?.oauth2 !== undefined;
@@ -30,16 +28,21 @@ export class GoogleAuthService {
       return false;
     }
 
-    const clientId = GOOGLE_CONFIG.clientId;
+    const clientId = this.getClientId();
     if (!clientId) {
-      if (onError) onError(new Error('Google Client ID is not configured. Please check .env.local file.'));
+      if (onError) onError(new Error('Google Client ID is missing. Please save your Client ID in the modal above.'));
       return false;
     }
 
     try {
       this.tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
-        scope: GOOGLE_CONFIG.scopes,
+        scope: [
+          'https://www.googleapis.com/auth/youtube.upload',
+          'https://www.googleapis.com/auth/youtube.readonly',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/userinfo.email'
+        ].join(' '),
         callback: async (tokenResponse) => {
           if (tokenResponse.error) {
             console.error('Google OAuth Token Error:', tokenResponse);
@@ -62,6 +65,12 @@ export class GoogleAuthService {
    */
   static connectYouTubeChannel(project) {
     return new Promise((resolve, reject) => {
+      const clientId = this.getClientId();
+      if (!clientId) {
+        reject(new Error('Google Client ID is missing. Please enter your Google Client ID below and click Save.'));
+        return;
+      }
+
       if (!this.isGoogleLoaded()) {
         const checkInterval = setInterval(() => {
           if (this.isGoogleLoaded()) {
@@ -149,7 +158,7 @@ export class GoogleAuthService {
 
     const ready = this.initClient(successHandler, errorHandler);
     if (!ready || !this.tokenClient) {
-      reject(new Error('Could not initialize Google OAuth client. Verify Google Client ID settings.'));
+      reject(new Error('Could not initialize Google OAuth client. Check Client ID settings.'));
       return;
     }
 
@@ -208,56 +217,6 @@ export class GoogleAuthService {
       avatar: snippet.thumbnails?.default?.url || snippet.thumbnails?.medium?.url || '',
       subscribersFormatted: formattedSubs,
       videoCount: stats.videoCount || 0
-    };
-  }
-
-  /**
-   * Upload video directly to YouTube Shorts via YouTube Data API v3
-   */
-  static async uploadVideoToYouTube(accessToken, videoBlobOrUrl, title, description, tags = ['#shorts']) {
-    if (!accessToken) throw new Error('No active YouTube access token found.');
-
-    const metadata = {
-      snippet: {
-        title: title.substring(0, 100),
-        description: `${description}\n\n#shorts #reels`,
-        tags: tags,
-        categoryId: '22'
-      },
-      status: {
-        privacyStatus: 'public',
-        selfDeclaredMadeForKids: false
-      }
-    };
-
-    if (videoBlobOrUrl instanceof Blob || videoBlobOrUrl instanceof File) {
-      const form = new FormData();
-      form.append('snippet', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('video', videoBlobOrUrl);
-
-      const response = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: form
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error?.message || `Upload failed with status ${response.status}`);
-      }
-
-      const result = await response.json();
-      return {
-        id: result.id,
-        url: `https://youtube.com/shorts/${result.id}`
-      };
-    }
-
-    return {
-      id: 'yt_' + Date.now(),
-      url: `https://youtube.com/shorts/${Math.random().toString(36).substring(2, 8)}`
     };
   }
 }

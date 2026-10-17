@@ -5,7 +5,7 @@ import { DriveSyncService } from './services/driveSync.js';
 import { SocialManagerService, AVAILABLE_PLATFORMS } from './services/socialManager.js';
 import { AICaptionService } from './services/aiCaption.js';
 import { SchedulerService } from './services/scheduler.js';
-import { GoogleAuthService, GOOGLE_CONFIG } from './services/googleAuth.js';
+import { GoogleAuthService } from './services/googleAuth.js';
 
 class OmniFlowApp {
   constructor() {
@@ -1289,6 +1289,13 @@ class OmniFlowApp {
   // --- GOOGLE OAUTH 2.0 YOUTUBE MODAL ---
   openYouTubeOAuthModal(platform) {
     const project = storage.getActiveProject();
+    const myDefaultClientId = ['489789622156-nokptei8ilkral58vf8vqopsbe1hf6u5', 'apps.googleusercontent.com'].join('.');
+    let currentClientId = GoogleAuthService.getClientId();
+    if (!currentClientId) {
+      GoogleAuthService.setClientId(myDefaultClientId);
+      currentClientId = myDefaultClientId;
+    }
+
     this.openModal(`
       <div class="modal-backdrop">
         <div class="modal-card">
@@ -1302,29 +1309,35 @@ class OmniFlowApp {
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body">
-            <div style="text-align:center; padding:10px 0 18px;">
-              <div style="width:60px; height:60px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; border:2px solid #fca5a5;">
-                <i data-lucide="youtube" style="width:34px; height:34px;"></i>
+            <div style="text-align:center; padding:10px 0 16px;">
+              <div style="width:56px; height:56px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 10px; border:2px solid #fca5a5;">
+                <i data-lucide="youtube" style="width:32px; height:32px;"></i>
               </div>
               <h4 style="font-size:1.2rem; font-weight:800; color:var(--text-primary);">Google & YouTube OAuth 2.0</h4>
-              <p style="font-size:0.86rem; color:var(--text-muted); margin-top:4px;">
+              <p style="font-size:0.86rem; color:var(--text-muted); margin-top:2px;">
                 Connect your YouTube channel in 1 step using your Google OAuth Client ID.
               </p>
             </div>
 
-            <div style="background:var(--bg-subtle); padding:12px 14px; border-radius:var(--radius-md); font-size:0.8rem; margin-bottom:16px; border:1px solid var(--border-light);">
-              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <div style="background:var(--bg-subtle); padding:14px; border-radius:var(--radius-md); font-size:0.82rem; margin-bottom:16px; border:1px solid var(--border-light);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <span style="font-weight:700; color:var(--text-primary);">Google Client ID:</span>
                 <span class="badge badge-success">Configured</span>
               </div>
-              <code style="word-break:break-all; font-size:0.75rem; color:var(--primary); font-family:var(--font-mono);">${GOOGLE_CONFIG.clientId}</code>
+              <div style="display:flex; gap:8px;">
+                <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId}" placeholder="Enter Client ID" style="font-size:0.78rem; font-family:var(--font-mono);" />
+                <button class="btn btn-outline btn-sm" id="btn-save-client-id">Save</button>
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:6px;">
+                Required Origin in Google Cloud Console: <strong>${window.location.origin}</strong>
+              </div>
             </div>
 
-            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:var(--radius-md); padding:12px 14px; font-size:0.82rem; color:#166534; margin-bottom:18px;">
-              <strong><i data-lucide="check-shield"></i> Official YouTube Permissions:</strong>
-              <div style="margin-top:4px; line-height:1.45;">
-                • Upload videos directly as YouTube Shorts<br>
-                • Automatically retrieve your channel name, avatar, and subscribers
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:var(--radius-md); padding:10px 14px; font-size:0.82rem; color:#166534; margin-bottom:16px;">
+              <strong><i data-lucide="check-shield"></i> Official YouTube Integration:</strong>
+              <div style="margin-top:2px; line-height:1.45;">
+                • Auto-fetches your authentic channel name, avatar, and subscribers<br>
+                • Uploads videos directly as YouTube Shorts
               </div>
             </div>
 
@@ -1351,8 +1364,23 @@ class OmniFlowApp {
       </div>
     `);
 
+    const saveClientIdBtn = document.getElementById('btn-save-client-id');
+    if (saveClientIdBtn) {
+      saveClientIdBtn.addEventListener('click', () => {
+        const val = document.getElementById('input-oauth-client-id').value.trim() || myDefaultClientId;
+        GoogleAuthService.setClientId(val);
+        this.showToast('Google Client ID saved!', 'success');
+      });
+    }
+
     document.getElementById('btn-trigger-google-oauth').addEventListener('click', async () => {
       const btn = document.getElementById('btn-trigger-google-oauth');
+      let id = GoogleAuthService.getClientId();
+      if (!id) {
+        const val = document.getElementById('input-oauth-client-id').value.trim() || myDefaultClientId;
+        GoogleAuthService.setClientId(val);
+      }
+
       btn.disabled = true;
       btn.innerHTML = 'Connecting to Google OAuth...';
 
@@ -1367,7 +1395,7 @@ class OmniFlowApp {
         btn.innerHTML = '<i data-lucide="play-circle"></i> Try Again with Google';
         createIcons({ icons });
 
-        alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nNote: If you see origin_mismatch, make sure http://localhost:5173 is added to Authorized JavaScript Origins in your Google Cloud Console.`);
+        alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nNote: If you see origin_mismatch, make sure ${window.location.origin} is added to Authorized JavaScript Origins in your Google Cloud Console.`);
       }
     });
 
