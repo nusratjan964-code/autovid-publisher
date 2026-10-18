@@ -1,13 +1,16 @@
 // Google OAuth 2.0 & YouTube Data API v3 Service
 import { storage } from './storage.js';
 
+export const DEFAULT_GOOGLE_CLIENT_ID = '489789622156-nokptei8ilkral58vf8vqopsbe1hf6u5.apps.googleusercontent.com';
+export const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
+
 export class GoogleAuthService {
   static tokenClient = null;
 
   static getClientId() {
     return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
            (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
-           '';
+           DEFAULT_GOOGLE_CLIENT_ID;
   }
 
   static setClientId(id) {

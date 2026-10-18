@@ -61,6 +61,8 @@ export class DriveSyncService {
       token = options.token || options.accessToken || '';
     }
 
+    let serverErrorObj = null;
+
     // Attempt 1: Server-side scan endpoint
     try {
       const scanRes = await fetch('/api/drive/scan', {
@@ -86,18 +88,10 @@ export class DriveSyncService {
         };
       }
 
-      if (scanData.error === 'ACCESS_RESTRICTED') {
-        return {
-          success: false,
-          error: 'ACCESS_RESTRICTED',
-          folderId: scanData.folderId || validation.id,
-          folderUrl: scanData.folderUrl || `https://drive.google.com/drive/folders/${scanData.folderId || validation.id}`,
-          message: scanData.message || 'Google Drive ফোল্ডারটি বর্তমানে Restricted / Private রয়েছে।',
-          solutions: scanData.solutions || []
-        };
-      }
-
-      if (scanData.message) {
+      if (scanData.error === 'ACCESS_RESTRICTED' || scanData.error === 'GOOGLE_TOKEN_EXPIRED') {
+        serverErrorObj = scanData;
+        console.warn('[DriveSync] Server scan reported:', scanData.error, 'trying client-side direct scan before showing error...');
+      } else if (scanData.message) {
         return {
           success: false,
           error: scanData.error || 'SCAN_ERROR',
@@ -172,7 +166,8 @@ export class DriveSyncService {
               title: file.name,
               duration: durationFormatted,
               size: file.size ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'Cloud Video',
-              videoUrl: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`,
+              videoUrl: `/api/drive/download?fileId=${file.id}`,
+              directDownloadUrl: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`,
               thumbnailUrl: file.thumbnailLink || `https://drive.google.com/thumbnail?id=${file.id}&sz=w600`,
               status: 'ready',
               source: 'Google Drive',
@@ -185,7 +180,8 @@ export class DriveSyncService {
             folderName: `Drive Folder (${folderId.substring(0, 8)}...)`,
             folderUrl,
             videos: mappedVideos,
-            count: mappedVideos.length
+            count: mappedVideos.length,
+            message: `Google Drive ফোল্ডার থেকে ${mappedVideos.length}টি ভিডিও সফলভাবে লোড হয়েছে!`
           };
         }
       } catch (err) {
@@ -193,10 +189,28 @@ export class DriveSyncService {
       }
     }
 
+    if (serverErrorObj) {
+      return {
+        success: false,
+        error: serverErrorObj.error || 'ACCESS_RESTRICTED',
+        folderId: serverErrorObj.folderId || validation.id,
+        folderUrl: serverErrorObj.folderUrl || `https://drive.google.com/drive/folders/${serverErrorObj.folderId || validation.id}`,
+        message: serverErrorObj.message || 'Google Drive ফোল্ডারটি বর্তমানে Restricted / Private রয়েছে।',
+        solutions: serverErrorObj.solutions || []
+      };
+    }
+
     return {
       success: false,
       error: 'ACCESS_RESTRICTED',
-      message: 'Google Drive ফোল্ডারটি প্রাইভেট বা সুরক্ষিত রয়েছে।\n\nভিডিও লোড করার সহজ সমাধান:\n১. গুগল ড্রাইভে ফোল্ডারে রাইট-ক্লিক করে Share > General access-এ "Anyone with the link can view" (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) সিলেক্ট করুন।\n২. অথবা "1-Click Connect Google Drive" বাটনে ক্লিক করে একাউন্ট পারমিশন দিন।\n৩. অথবা সরাসরি আপনার কম্পিউটার থেকে নিচে ভিডিও ফাইল সিলেক্ট করুন।'
+      folderId: validation.id,
+      folderUrl: `https://drive.google.com/drive/folders/${validation.id}`,
+      message: 'Google Drive ফোল্ডারটি বর্তমানে Restricted / Private রয়েছে।',
+      solutions: [
+        '১. ফোল্ডারটির শেয়ার পারমিশন পরিবর্তন করুন: নিচের "Open Folder in Google Drive" বাটনে ক্লিক করে Share > General access-এ "Anyone with the link" (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) সিলেক্ট করুন।',
+        '২. অথবা নিচের "1-Click Connect & Scan" বাটনে ক্লিক করে আপনার Google একাউন্ট অনুমোদিত করুন।',
+        '৩. অথবা সরাসরি আপনার কম্পিউটার থেকে নিচে ড্রপজোনে ভিডিও সিলেক্ট করুন।'
+      ]
     };
   }
 

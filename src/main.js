@@ -535,7 +535,10 @@ class OmniFlowApp {
     const ytAccount = project.socialAccounts?.find(a => a.id === 'youtube');
     const storedToken = GoogleAuthService.getYouTubeToken(project) || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '');
     const hasGoogleAuth = !!(storedToken && storedToken.trim().length > 15);
-    const savedApiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_api_key') : '') || '';
+    const savedApiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_api_key') : '') || 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
+    if (typeof localStorage !== 'undefined' && !localStorage.getItem('omni_google_api_key')) {
+      try { localStorage.setItem('omni_google_api_key', savedApiKey); } catch (e) {}
+    }
 
     return `
       <div class="page-header">
@@ -2553,8 +2556,8 @@ class OmniFlowApp {
     }
 
     const project = storage.getActiveProject();
-    const apiKey = project?.aiSettings?.apiKey || localStorage.getItem('omni_google_api_key') || '';
-    const token = GoogleAuthService.getYouTubeToken(project) || localStorage.getItem('omni_google_access_token') || '';
+    const apiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_api_key') : '') || project?.aiSettings?.googleApiKey || 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
+    const token = GoogleAuthService.getYouTubeToken(project) || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '') || '';
 
     const scanResult = await DriveSyncService.scanDriveFolder(url, { apiKey, token, project });
 

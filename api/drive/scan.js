@@ -127,8 +127,9 @@ async function handleDriveDownload(req, res, queryParams) {
   }
 
   const cache = loadCache();
-  const token = inputToken || cache.youtube?.accessToken || '';
-  const apiKey = queryParams.apiKey || cache.googleApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || '';
+  const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
+  const apiKey = queryParams.apiKey || cache.googleApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || DEFAULT_GOOGLE_API_KEY;
+  const appReferer = req.headers['referer'] || req.headers['origin'] || 'https://autovid-publisher.vercel.app/';
 
   console.log(`[Drive Download Proxy] Fetching Drive file ${fileId} (Has Token: ${!!token})...`);
 
@@ -137,7 +138,10 @@ async function handleDriveDownload(req, res, queryParams) {
     try {
       const driveApiUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
       const apiRes = await fetch(driveApiUrl, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Referer': appReferer,
+          'Authorization': `Bearer ${token}` 
+        }
       });
 
       if (apiRes.ok) {
@@ -279,8 +283,13 @@ export default async function handler(req, res) {
     cache.googleApiKey = inputApiKey;
     saveCache(cache);
   }
-  let token = inputToken || await getRefreshedToken(cache);
-  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || cache.googleApiKey || '';
+  const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
+  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || cache.googleApiKey || DEFAULT_GOOGLE_API_KEY;
+  const appReferer = req.headers['referer'] || req.headers['origin'] || 'https://autovid-publisher.vercel.app/';
+  const driveHeaders = {
+    'Referer': appReferer,
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
 
   console.log(`[Drive Scanner] Found ${targets.length} targets to process (Token: ${!!token}, Key: ${!!apiKey})`);
 
@@ -355,11 +364,10 @@ export default async function handler(req, res) {
   if (token || apiKey) {
     try {
       const q = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.webm' or name contains '.mkv') and trashed = false`);
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
       const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
       const driveApiUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}`;
 
-      const apiRes = await fetch(driveApiUrl, { headers });
+      const apiRes = await fetch(driveApiUrl, { headers: driveHeaders });
       if (apiRes.ok) {
         const data = await apiRes.json();
         let files = data.files || [];
@@ -368,13 +376,13 @@ export default async function handler(req, res) {
         if (files.length === 0) {
           try {
             const subQ = encodeURIComponent(`'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-            const subRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subQ}&fields=files(id,name)${keyParam}`, { headers });
+            const subRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subQ}&fields=files(id,name)${keyParam}`, { headers: driveHeaders });
             if (subRes.ok) {
               const subData = await subRes.json();
               const subfolders = subData.files || [];
               for (const sub of subfolders) {
                 const subVideoQ = encodeURIComponent(`'${sub.id}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.webm') and trashed = false`);
-                const subVideoRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subVideoQ}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}`, { headers });
+                const subVideoRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subVideoQ}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}`, { headers: driveHeaders });
                 if (subVideoRes.ok) {
                   const svd = await subVideoRes.json();
                   if (svd.files && svd.files.length > 0) {
