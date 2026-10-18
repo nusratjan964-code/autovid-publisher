@@ -231,9 +231,23 @@ export class SocialManagerService {
       account.followers = '0';
       if (platformId === 'facebook') {
         delete account.token;
+        delete account.accessToken;
         account.tokenConfigured = false;
         account.pageId = null;
         account.pageName = '';
+      }
+      if (platformId === 'youtube') {
+        delete account.token;
+        delete account.accessToken;
+        account.tokenConfigured = false;
+        account.channelId = null;
+        account.channelTitle = '';
+        account.handle = '';
+        account.avatar = '';
+        account.followers = '0';
+        if (typeof localStorage !== 'undefined') {
+          try { localStorage.removeItem('omni_google_access_token'); } catch (e) {}
+        }
       }
     }
     project.scheduleSettings.targetPlatforms = project.scheduleSettings.targetPlatforms.filter(id => id !== platformId);

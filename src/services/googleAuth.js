@@ -68,7 +68,7 @@ export class GoogleAuthService {
   /**
    * 1-Click Trigger: Connect YouTube Channel via Google OAuth 2.0
    */
-  static connectYouTubeChannel(project) {
+  static connectYouTubeChannel(project, options = {}) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const timeoutId = setTimeout(() => {
@@ -100,7 +100,7 @@ export class GoogleAuthService {
       const executeFlow = () => {
         // Method 1: Try Token Flow first for Drive & YouTube upload
         try {
-          this.executeTokenFlow(project, safeResolve, safeReject);
+          this.executeTokenFlow(project, safeResolve, safeReject, options);
         } catch (tokenErr) {
           console.warn('[GoogleAuth] Token client notice, trying code flow:', tokenErr);
           // Fallback: initCodeClient
@@ -173,7 +173,7 @@ export class GoogleAuthService {
     });
   }
 
-  static executeTokenFlow(project, resolve, reject) {
+  static executeTokenFlow(project, resolve, reject, options = {}) {
     const successHandler = async (tokenResponse) => {
       const accessToken = tokenResponse.access_token;
       try {
@@ -239,7 +239,7 @@ export class GoogleAuthService {
     }
 
     try {
-      this.tokenClient.requestAccessToken({ prompt: 'consent' });
+      this.tokenClient.requestAccessToken({ prompt: options?.prompt || 'select_account' });
     } catch (e) {
       reject(e);
     }

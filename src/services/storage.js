@@ -46,11 +46,10 @@ class StorageService {
                   }
                 }
                 if (a.id === 'youtube') {
-                  a.channelTitle = a.channelTitle || 'chiku bd';
-                  a.channelId = a.channelId || 'UCCOo5jxEtLRgJQukBMnt-QQ';
-                  a.handle = a.handle || '@chikubd';
-                  a.connected = true;
-                  a.active = true;
+                  if (a.connected === undefined) {
+                    a.connected = true;
+                    a.active = true;
+                  }
                   if (cachedYtToken) {
                     a.accessToken = cachedYtToken;
                     a.token = cachedYtToken;

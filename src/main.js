@@ -1010,9 +1010,9 @@ class OmniFlowApp {
                       </button>
                     ` : ''}
                     ${platformDef.id === 'youtube' ? `
-                      <button class="btn btn-outline btn-sm btn-connect-platform" data-platform-id="youtube" style="border-color:#FF0000; color:#FF0000;" title="Configure YouTube & OAuth">
-                        <i data-lucide="settings-2"></i>
-                        <span>Configure / Test</span>
+                      <button class="btn btn-outline btn-sm btn-connect-platform" data-platform-id="youtube" style="border-color:#FF0000; color:#FF0000; font-weight:600; gap:5px;" title="চ্যানেল পরিবর্তন ও কনফিগার করুন">
+                        <i data-lucide="refresh-cw"></i>
+                        <span>চ্যানেল পরিবর্তন (Change Channel)</span>
                       </button>
                     ` : ''}
                     <button class="btn btn-outline btn-sm btn-disconnect-platform" data-platform-id="${platformDef.id}" style="color:var(--danger); border-color:#fecaca;">
@@ -1922,72 +1922,85 @@ class OmniFlowApp {
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body">
-            <div style="text-align:center; padding:6px 0 10px;">
-              <div style="width:52px; height:52px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; border:2px solid #fca5a5;">
-                <i data-lucide="youtube" style="width:28px; height:28px;"></i>
+            <div style="text-align:center; padding:4px 0 10px;">
+              <div style="width:48px; height:48px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; border:2px solid #fca5a5;">
+                <i data-lucide="youtube" style="width:26px; height:26px;"></i>
               </div>
-              <h4 style="font-size:1.15rem; font-weight:800; color:var(--text-primary);">YouTube Shorts Integration</h4>
-              <p style="font-size:0.84rem; color:var(--text-muted); margin-top:2px;">
-                চ্যানেল <strong>chiku bd</strong> (@chikubd) এ স্বয়ংক্রিয়ভাবে ভিডিও আপলোড কনফিগার করুন।
+              <h4 style="font-size:1.15rem; font-weight:800; color:var(--text-primary);">YouTube চ্যানেল পরিবর্তন ও কনফিগারেশন</h4>
+              <p style="font-size:0.82rem; color:var(--text-muted); margin-top:2px;">
+                আপনার পছন্দমতো যেকোনো YouTube চ্যানেল সিলেক্ট বা পরিবর্তন করুন।
               </p>
             </div>
 
-            <!-- "Service unavailable" Troubleshooting Notice Box -->
-            <div style="background:rgba(239, 68, 68, 0.05); border:1px solid rgba(239, 68, 68, 0.25); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px; text-align:left;">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                <i data-lucide="alert-triangle" style="width:16px; height:16px; color:#ef4444;"></i>
-                <strong style="font-size:0.82rem; color:var(--text-primary);">Google "Service unavailable" দেখালে ৩টি সহজ ধাপ:</strong>
+            <!-- Current Connected Channel Preview Bar -->
+            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <div>
+                <div style="font-size:0.72rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">বর্তমানে সিলেক্টেড চ্যানেল:</div>
+                <div style="font-size:0.95rem; font-weight:800; color:var(--text-primary);">
+                  ${ytAccount?.channelTitle || 'chiku bd'} 
+                  <span style="font-size:0.8rem; font-weight:600; color:#FF0000; margin-left:4px;">(${ytAccount?.handle || '@chikubd'})</span>
+                </div>
               </div>
-              <ol style="margin:0; padding-left:18px; font-size:0.76rem; color:var(--text-secondary); line-height:1.5;">
-                <li><strong>লগইন পপআপে মূল Gmail সিলেক্ট করুন:</strong> Google পপআপে চ্যানেল/ব্র্যান্ড নামের ওপর ক্লিক না করে আপনার মূল Gmail ইমেইল সিলেক্ট করবেন (Google ব্র্যান্ড একাউন্টকে সরাসরি অনুমতি দেয় না)।</li>
-                <li><strong>Google Cloud-এ YouTube Data API v3 এনেবল করুন:</strong> 
-                  <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com?project=primal-timing-467317-f1" target="_blank" rel="noopener noreferrer" style="color:#ef4444; font-weight:700; text-decoration:underline;">
-                    YouTube Data API v3 Enable করার লিংক (Click Here)
-                  </a>
-                </li>
-                <li><strong>অথবা বিকল্প দ্রুত উপায়:</strong> নিচের <strong>Google OAuth Playground</strong> থেকে ১-মিনিটে Access Token কপি করে নিচে পেস্ট করুন।</li>
-              </ol>
-            </div>
-
-            <!-- Option 1: 1-Click Instant Connect Existing Channel -->
-            <div style="display:flex; gap:10px; margin-bottom:12px;">
-              <button class="btn btn-primary" id="btn-quick-activate-yt" style="flex:1; background:linear-gradient(135deg, #10b981 0%, #059669 100%); border:none; padding:10px; font-weight:700; font-size:0.85rem; display:flex; align-items:center; justify-content:center; gap:6px;">
-                <i data-lucide="zap"></i>
-                <span>⚡ চ্যানেল chiku bd সচল রাখুন (Instant Activate)</span>
+              <button type="button" class="btn btn-danger btn-sm" id="btn-modal-disconnect-yt" style="font-size:0.75rem; padding:5px 10px; gap:4px;">
+                <i data-lucide="trash-2" style="width:13px; height:13px;"></i> <span>Disconnect</span>
               </button>
             </div>
 
-            <!-- Option 2: 1-Click Connect Button -->
-            <button class="btn btn-primary btn-lg" id="btn-trigger-google-oauth" style="width:100%; display:flex; align-items:center; justify-content:center; gap:10px; background:#FF0000; border-color:#FF0000; font-weight:700; font-size:0.9rem;">
-              <i data-lucide="play-circle"></i>
-              <span>Google OAuth 1-Click Connect (Main Gmail)</span>
-            </button>
-
-            <div style="margin:14px 0; display:flex; align-items:center; gap:10px;">
-              <div style="flex:1; height:1px; background:var(--border-light);"></div>
-              <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:700;">অথবা সরাসরি টোকেন দিয়ে কানেক্ট করুন</span>
-              <div style="flex:1; height:1px; background:var(--border-light);"></div>
+            <!-- Option 1: 1-Click Instant Switch to chiku bd -->
+            <div style="margin-bottom:12px;">
+              <button class="btn btn-primary" id="btn-quick-activate-yt" style="width:100%; background:linear-gradient(135deg, #10b981 0%, #059669 100%); border:none; padding:11px; font-weight:700; font-size:0.88rem; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(16, 185, 129, 0.25);">
+                <i data-lucide="check-circle-2"></i>
+                <span>⚡ ১-ক্লিকে "chiku bd" (@chikubd) তে পরিবর্তন করুন</span>
+              </button>
             </div>
 
-            <!-- Option 3: Direct Token Paste & OAuth Playground helper -->
-            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+            <!-- Option 2: Custom Channel Name & Handle Edit Form -->
+            <div style="background:var(--bg-card); border:1.5px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
+              <h5 style="margin:0 0 8px; font-size:0.84rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+                <i data-lucide="edit-3" style="width:14px; height:14px; color:#4f46e5;"></i>
+                <span>অন্য যেকোনো চ্যানেলের নাম ও হ্যান্ডেল লিখুন:</span>
+              </h5>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                <div>
+                  <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেলের নাম (Title)</label>
+                  <input type="text" class="form-input" id="input-custom-yt-title" value="${ytAccount?.channelTitle === 'md nahid' ? 'chiku bd' : (ytAccount?.channelTitle || 'chiku bd')}" placeholder="যেমন: chiku bd" style="font-size:0.82rem;" />
+                </div>
+                <div>
+                  <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেল হ্যান্ডেল (@Handle)</label>
+                  <input type="text" class="form-input" id="input-custom-yt-handle" value="${ytAccount?.handle === '@mdnahid-du5ln' ? '@chikubd' : (ytAccount?.handle || '@chikubd')}" placeholder="যেমন: @chikubd" style="font-size:0.82rem;" />
+                </div>
+              </div>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-save-custom-yt-channel" style="width:100%; border-color:#4f46e5; color:#4f46e5; font-weight:700; gap:6px;">
+                <i data-lucide="save"></i>
+                <span>এই চ্যানেলটি সেভ ও সক্রিয় করুন (Save & Switch)</span>
+              </button>
+            </div>
+
+            <!-- Option 3: Switch Google Account Button -->
+            <div style="margin-bottom:14px;">
+              <button class="btn btn-outline" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#FF0000; font-weight:700; padding:10px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <i data-lucide="user-check"></i>
+                <span>🔄 অন্য Google Account দিয়ে লগইন করুন (Switch Google Account)</span>
+              </button>
+              <div style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-top:4px;">
+                লগইন পপআপ আসলে আপনার মূল Gmail একাউন্ট সিলেক্ট করবেন।
+              </div>
+            </div>
+
+            <!-- Option 4: Direct Token Paste & OAuth Playground helper -->
+            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <label style="font-size:0.82rem; font-weight:700; color:var(--text-primary); margin:0;">
+                <label style="font-size:0.8rem; font-weight:700; color:var(--text-primary); margin:0;">
                   Google OAuth Access Token:
                 </label>
-                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:#FF0000; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
+                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.73rem; color:#FF0000; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
                   <span>Google OAuth Playground</span>
                   <i data-lucide="external-link" style="width:11px; height:11px;"></i>
                 </a>
               </div>
-              <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical;" placeholder="ya29... (Google Access Token পেস্ট করুন)">${existingToken || ''}</textarea>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px; line-height:1.4;">
-                <span style="color:#FF0000; font-weight:600;">টিপস:</span> Google OAuth Playground থেকে <code>youtube.upload</code> পারমিশন নিয়ে 'Authorize APIs' &rarr; 'Exchange authorization code for tokens' করলেই টোকেন পাওয়া যায়।
-              </div>
-
+              <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="ya29... (Google Access Token পেস্ট করুন)">${existingToken || ''}</textarea>
               <div id="yt-token-verify-status" style="margin-top:8px; display:none;"></div>
-
-              <div style="display:flex; gap:8px; margin-top:10px;">
+              <div style="display:flex; gap:8px; margin-top:8px;">
                 <button type="button" class="btn btn-primary btn-sm" id="btn-verify-save-yt-token" style="background:#FF0000; border-color:#FF0000; flex:1; display:flex; align-items:center; justify-content:center; gap:6px;">
                   <i data-lucide="check-circle-2"></i>
                   <span>টোকেন যাচাই ও সেভ করুন</span>
@@ -1996,10 +2009,10 @@ class OmniFlowApp {
             </div>
 
             <!-- Advanced Client ID settings toggle -->
-            <details style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:8px;">
+            <details style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:8px;">
               <summary style="cursor:pointer; font-weight:600; color:var(--text-muted);">Client ID কনফিগারেশন</summary>
               <div style="margin-top:8px; display:flex; gap:6px;">
-                <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId || ''}" placeholder="Enter Client ID" style="font-size:0.76rem; font-family:var(--font-mono);" />
+                <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId || ''}" placeholder="Enter Client ID" style="font-size:0.75rem; font-family:var(--font-mono);" />
                 <button class="btn btn-outline btn-sm" id="btn-save-client-id">Save</button>
               </div>
             </details>
@@ -2021,7 +2034,19 @@ class OmniFlowApp {
       });
     }
 
-    // 0. Quick Activate Button for chiku bd
+    // Disconnect YouTube Channel from Modal
+    const modalDisconnectBtn = document.getElementById('btn-modal-disconnect-yt');
+    if (modalDisconnectBtn) {
+      modalDisconnectBtn.addEventListener('click', () => {
+        SocialManagerService.disconnectPlatform(project, 'youtube');
+        storage.saveState();
+        this.showToast('YouTube চ্যানেল ডিসকানেক্ট করা হয়েছে। আপনি এখন নতুন চ্যানেল কানেক্ট করতে পারেন।', 'info');
+        this.closeModal();
+        this.render();
+      });
+    }
+
+    // 1-Click Switch to chiku bd
     const quickActivateBtn = document.getElementById('btn-quick-activate-yt');
     if (quickActivateBtn) {
       quickActivateBtn.addEventListener('click', () => {
@@ -2045,6 +2070,8 @@ class OmniFlowApp {
         ytAccount.handle = '@chikubd';
         ytAccount.channelTitle = 'chiku bd';
         ytAccount.channelId = 'UCCOo5jxEtLRgJQukBMnt-QQ';
+        ytAccount.followers = 'Active';
+        ytAccount.avatar = '';
         ytAccount.lastPost = 'Ready';
 
         if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
@@ -2052,7 +2079,47 @@ class OmniFlowApp {
         }
 
         storage.saveState();
-        this.showToast('🎉 YouTube চ্যানেল "chiku bd" সফলভাবে সক্রিয় করা হয়েছে!', 'success');
+        this.showToast('🎉 চ্যানেল সফলভাবে পরিবর্তন করে "chiku bd" (@chikubd) সেট করা হয়েছে!', 'success');
+        this.closeModal();
+        this.render();
+      });
+    }
+
+    // Custom Channel Title & Handle Save
+    const saveCustomChannelBtn = document.getElementById('btn-save-custom-yt-channel');
+    if (saveCustomChannelBtn) {
+      saveCustomChannelBtn.addEventListener('click', () => {
+        const titleVal = (document.getElementById('input-custom-yt-title')?.value || '').trim() || 'chiku bd';
+        let handleVal = (document.getElementById('input-custom-yt-handle')?.value || '').trim() || '@chikubd';
+        if (!handleVal.startsWith('@')) handleVal = '@' + handleVal;
+
+        let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
+        if (!ytAccount) {
+          ytAccount = {
+            id: 'youtube',
+            name: 'YouTube Shorts',
+            icon: 'youtube',
+            color: '#FF0000',
+            connected: true,
+            active: true
+          };
+          project.socialAccounts.push(ytAccount);
+        }
+        ytAccount.connected = true;
+        ytAccount.active = true;
+        ytAccount.channelTitle = titleVal;
+        ytAccount.handle = handleVal;
+        ytAccount.channelId = ytAccount.channelId || 'UCCOo5jxEtLRgJQukBMnt-QQ';
+        ytAccount.followers = 'Active';
+        ytAccount.avatar = '';
+        ytAccount.lastPost = 'Ready';
+
+        if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
+          project.scheduleSettings.targetPlatforms.push('youtube');
+        }
+
+        storage.saveState();
+        this.showToast(`🎉 চ্যানেল সফলভাবে পরিবর্তন করে "${titleVal}" (${handleVal}) সেট করা হয়েছে!`, 'success');
         this.closeModal();
         this.render();
       });
