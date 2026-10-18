@@ -133,8 +133,12 @@ export default async function handler(req, res) {
   }
 
   const cache = loadCache();
+  if (inputApiKey && inputApiKey !== cache.googleApiKey) {
+    cache.googleApiKey = inputApiKey;
+    saveCache(cache);
+  }
   let token = inputToken || await getRefreshedToken(cache);
-  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || '';
+  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || cache.googleApiKey || '';
 
   console.log(`[Drive Scanner] Found ${targets.length} targets to process (Token: ${!!token}, Key: ${!!apiKey})`);
 

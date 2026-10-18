@@ -57,7 +57,7 @@ export class DriveSyncService {
     if (typeof options === 'string') {
       apiKey = options;
     } else if (options && typeof options === 'object') {
-      apiKey = options.apiKey || options.googleApiKey || '';
+      apiKey = options.apiKey || options.googleApiKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_api_key') : '') || '';
       token = options.token || options.accessToken || '';
     }
 

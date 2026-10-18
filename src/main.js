@@ -533,7 +533,9 @@ class OmniFlowApp {
   renderDriveView(project) {
     const drive = project.driveConfig || {};
     const ytAccount = project.socialAccounts?.find(a => a.id === 'youtube');
-    const hasGoogleAuth = !!(ytAccount?.connected && (ytAccount?.accessToken || GoogleAuthService.getYouTubeToken(project)));
+    const storedToken = GoogleAuthService.getYouTubeToken(project) || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '');
+    const hasGoogleAuth = !!(storedToken && storedToken.trim().length > 15);
+    const savedApiKey = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_api_key') : '') || '';
 
     return `
       <div class="page-header">
@@ -553,6 +555,43 @@ class OmniFlowApp {
         </div>
 
         <div id="drive-alert-container"></div>
+
+        <!-- Google Drive API Key Configuration Banner -->
+        <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="width:24px; height:24px; border-radius:50%; background:#10b981; color:white; display:flex; align-items:center; justify-content:center; font-size:12px;">
+                <i data-lucide="key" style="width:13px; height:13px;"></i>
+              </span>
+              <div>
+                <strong style="font-size:0.86rem; color:var(--text-primary);">Google Drive API কনফিগারেশন</strong>
+                <span style="font-size:0.75rem; color:${savedApiKey ? '#10b981' : 'var(--text-muted)'}; margin-left:6px; font-weight:600;">
+                  ${savedApiKey ? '● API Key Active' : '● API Key দিন (অটো-স্ক্যান)'}
+                </span>
+              </div>
+            </div>
+            <a href="https://console.cloud.google.com/apis/credentials?project=primal-timing-467317-f1" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:0.75rem; gap:4px; text-decoration:none;">
+              <span>Google Cloud Credentials থেকে API Key নিন</span>
+              <i data-lucide="external-link" style="width:12px; height:12px;"></i>
+            </a>
+          </div>
+          <p style="font-size:0.76rem; color:var(--text-secondary); margin:0 0 8px; line-height:1.4;">
+            যেহেতু আপনি Google Cloud Project (<strong>primal-timing-467317-f1</strong>)-এ Google Drive API এনেবল করেছেন, সেখান থেকে <strong>+ CREATE CREDENTIALS ➔ API key</strong> চাপলে যে Key পাবেন, তা এখানে দিন:
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input 
+              type="text" 
+              class="form-input" 
+              id="input-google-api-key" 
+              placeholder="AIzaSy... (আপনার Google Cloud API Key পেস্ট করুন)" 
+              value="${savedApiKey}" 
+              style="font-family:monospace; font-size:0.82rem; flex:1; min-width:240px;" 
+            />
+            <button type="button" class="btn btn-primary btn-sm" id="btn-save-google-api-key" style="white-space:nowrap; gap:6px;">
+              <i data-lucide="save"></i> <span>Save & Activate</span>
+            </button>
+          </div>
+        </div>
 
         <!-- Google Authorization Banner -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; background:var(--bg-subtle); padding:10px 14px; border-radius:var(--radius-md); border:1px solid var(--border-light); flex-wrap:wrap; gap:10px;">
@@ -2240,6 +2279,34 @@ class OmniFlowApp {
         }
       });
     });
+
+    // Google Drive API Key Save Event
+    const saveApiKeyBtn = document.getElementById('btn-save-google-api-key');
+    if (saveApiKeyBtn) {
+      saveApiKeyBtn.addEventListener('click', () => {
+        const keyInput = document.getElementById('input-google-api-key');
+        const keyVal = keyInput ? keyInput.value.trim() : '';
+        if (keyVal) {
+          localStorage.setItem('omni_google_api_key', keyVal);
+          const project = storage.getActiveProject();
+          if (project) {
+            project.aiSettings = project.aiSettings || {};
+            project.aiSettings.googleApiKey = keyVal;
+            storage.saveState();
+          }
+          this.showToast('Google Drive API Key সেভ ও সক্রিয় করা হয়েছে!', 'success');
+          this.render();
+          const folderInput = document.getElementById('input-drive-url');
+          if (folderInput && folderInput.value.trim()) {
+            this.syncDriveFromCurrentInput(folderInput.value.trim());
+          }
+        } else {
+          localStorage.removeItem('omni_google_api_key');
+          this.showToast('Google API Key সরানো হয়েছে', 'warning');
+          this.render();
+        }
+      });
+    }
 
     // Drive Sync Events
     const tabSingle = document.getElementById('btn-tab-single-link');
