@@ -1,7 +1,8 @@
 import {
   setActivePageId,
   getActivePageSanitized,
-  getSanitizedPages
+  getSanitizedPages,
+  getPageAccessToken
 } from './credentials.js';
 
 export default async function handler(req, res) {
@@ -33,10 +34,12 @@ export default async function handler(req, res) {
   }
 
   setActivePageId(selectedPage.id);
+  const token = selectedPage.accessToken || getPageAccessToken(selectedPage.id) || '';
 
   return res.status(200).json({
     success: true,
     page: selectedPage,
+    token,
     message: `✅ "${selectedPage.name}" (ID: ${selectedPage.id}) সক্রিয় পেজ হিসেবে সেট করা হয়েছে!`
   });
 }

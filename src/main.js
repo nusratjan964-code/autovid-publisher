@@ -1632,11 +1632,14 @@ class OmniFlowApp {
       btn.innerHTML = `<span>সংযুক্ত করা হচ্ছে...</span>`;
       btn.disabled = true;
 
-      // Select page on server
-      await SocialManagerService.selectFacebookPage(selectedId);
+      // Select page on server & get token
+      const selectRes = await SocialManagerService.selectFacebookPage(selectedId);
+      const chosenPage = discoveredPages.find(p => p.id === selectedId);
+      const tokenInput = (document.getElementById('fb-token-input')?.value || '').trim();
+      const chosenToken = selectRes?.token || chosenPage?.accessToken || tokenInput || SocialManagerService.getFacebookToken(project);
 
-      // Verify page status with server-side token
-      const status = await SocialManagerService.checkFacebookStatus(selectedId);
+      // Verify page status with token
+      const status = await SocialManagerService.checkFacebookStatus(selectedId, chosenToken);
       btn.innerHTML = originalText;
       btn.disabled = false;
 
@@ -1648,6 +1651,7 @@ class OmniFlowApp {
         pageId: finalPageId,
         pageName: finalPageName,
         handle: cleanHandle,
+        token: chosenToken || '',
         tokenConfigured: true
       });
 
@@ -2005,7 +2009,11 @@ class OmniFlowApp {
           this.showToast(`🎉 "${video.title}" published successfully to ${targetName}!`, 'success');
           this.render();
         } catch (err) {
-          this.showToast(err.message, 'error');
+          if (err.message && (err.message.includes('TOKEN') || err.message.includes('190') || err.message.includes('token') || err.message.includes('টোকেন') || err.message.includes('Access Token'))) {
+            this.openPublishTokenModal(project, vidId, err.message);
+          } else {
+            this.showToast(err.message, 'error');
+          }
           this.render();
         }
       });
@@ -2302,7 +2310,7 @@ class OmniFlowApp {
   }
 
   // --- PUBLISH ACTION ---
-  async runPublishAction() {
+  async runPublishAction(forceSim = false) {
     const project = storage.getActiveProject();
     if (!project || project.videos.length === 0) {
       this.showToast('No videos available in library. Please import a video first.', 'warning');
@@ -2317,18 +2325,167 @@ class OmniFlowApp {
       return;
     }
 
+    const activeFb = activeChannels.find(a => a.id === 'facebook');
+    const fbToken = SocialManagerService.getFacebookToken(project);
+
+    if (activeFb && !fbToken && !forceSim) {
+      this.openPublishTokenModal(project, null, 'Facebook Access Token অনুপস্থিত। লাইভ পোস্ট করতে টোকেন দিন অথবা সিমুলেশন মোডে পাবলিশ সম্পন্ন করুন।');
+      return;
+    }
+
     try {
       this.showToast('Starting video publication...', 'info');
       const res = await SchedulerService.publishVideo(project, null, (p) => {
         if (p.message) this.showToast(p.message, 'info');
-      });
+      }, { forceSimulation: forceSim });
       storage.saveState();
-      this.showToast(`🎉 "${res.video?.title || 'Video'}" published successfully!`, 'success');
+      this.showToast(`🎉 "${res.video?.title || 'Video'}" published successfully to ${res.video?.platforms?.join(', ') || 'Social Channels'}!`, 'success');
       this.render();
     } catch (err) {
-      this.showToast(err.message, 'error');
+      if (err.message && (err.message.includes('TOKEN') || err.message.includes('190') || err.message.includes('token') || err.message.includes('টোকেন') || err.message.includes('Access Token'))) {
+        this.openPublishTokenModal(project, null, err.message);
+      } else {
+        this.showToast(err.message, 'error');
+      }
       this.render();
     }
+  }
+
+  openPublishTokenModal(project, targetVideoId = null, errorContext = '') {
+    const fbAccount = project.socialAccounts?.find(a => a.id === 'facebook');
+    const pageName = fbAccount?.pageName || 'Chiku bd';
+    const pageId = fbAccount?.pageId || '1309863422219233';
+
+    this.openModal(`
+      <div class="modal-backdrop">
+        <div class="modal-card" style="max-width:580px;">
+          <div class="modal-header">
+            <h3 class="modal-title" style="display:flex; align-items:center; gap:10px;">
+              <span style="width:34px; height:34px; border-radius:var(--radius-sm); background:#1877F2; color:white; display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="send"></i>
+              </span>
+              <span>Social Media Auto-Publishing Dispatch</span>
+            </h3>
+            <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
+          </div>
+          <div class="modal-body">
+            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:700; color:var(--text-primary); font-size:0.95rem;">
+                    Target Page: <span style="color:#1877F2;">${pageName}</span> (ID: <code>${pageId}</code>)
+                  </div>
+                  <div style="font-size:0.8rem; color:var(--text-muted); margin-top:3px;">
+                    লক্ষ্য চ্যানেল: Facebook Reels, YouTube Shorts, এবং অন্যান্য কানেক্টেড প্ল্যাটফর্ম
+                  </div>
+                </div>
+                <span class="badge badge-warning">Action Required</span>
+              </div>
+            </div>
+
+            <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:var(--radius-md); padding:12px 14px; font-size:0.84rem; margin-bottom:14px; color:var(--text-primary);">
+              <div style="font-weight:700; color:#EF4444; margin-bottom:3px; display:flex; align-items:center; gap:6px;">
+                <i data-lucide="alert-triangle" style="width:16px; height:16px;"></i>
+                <span>Facebook Access Token আপডেট প্রয়োজন</span>
+              </div>
+              <p style="font-size:0.82rem; color:var(--text-secondary); line-height:1.45; margin:0;">
+                ${(errorContext || '').replace(/^Publishing failed:\s*/i, '').replace(/^Facebook Error:\s*/i, '') || 'Facebook Page Access Token এর মেয়াদ শেষ (Expired) বা টোকেন কনফিগার করা নেই।'}
+              </p>
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
+              <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <span><strong>নতুন Meta Graph API Token দিন (Live Post করতে):</strong></span>
+                <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" style="font-size:0.78rem; color:#1877F2; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
+                  <span>Graph API Explorer খুলুন</span>
+                  <i data-lucide="external-link" style="width:12px; height:12px;"></i>
+                </a>
+              </label>
+              <textarea class="form-input" id="quick-publish-token" rows="3" style="font-family:monospace; font-size:0.82rem; resize:vertical;" placeholder="এখানে নতুন Access Token পেস্ট করুন (EAA... বা EAAT...)"></textarea>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+                Graph API Explorer-এ আপনার Page সিলেক্ট করে <code>pages_manage_posts</code> এবং <code>publish_video</code> পারমিশন সহ Generate Token করুন।
+              </div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-top:10px;">
+              <button class="btn btn-primary" id="btn-submit-token-and-publish" style="flex:1; background:#1877F2; border-color:#1877F2; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <i data-lucide="rocket"></i>
+                <span>টোকেন সেভ করে সরাসরি লাইভ পোস্ট করুন</span>
+              </button>
+            </div>
+
+            <div style="margin:16px 0; display:flex; align-items:center; gap:10px;">
+              <div style="flex:1; height:1px; background:var(--border-light);"></div>
+              <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:700;">অথবা</span>
+              <div style="flex:1; height:1px; background:var(--border-light);"></div>
+            </div>
+
+            <button class="btn btn-outline" id="btn-run-simulation-direct" style="width:100%; border-color:#10B981; color:#10B981; display:flex; align-items:center; justify-content:center; gap:8px;">
+              <i data-lucide="play-circle"></i>
+              <span>সিমুলেশন মোডে সফল পাবলিশ সম্পন্ন করুন (Instant Test)</span>
+            </button>
+            <div style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:6px;">
+              সিমুলেশন মোডে সম্পূর্ণ অটো-পাবলিশ পাইপলাইন, কনফেটি এবং লাইভ পোস্ট লিঙ্ক তৈরি হবে।
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline btn-close-modal">বাতিল</button>
+          </div>
+        </div>
+      </div>
+    `);
+    this.refreshIcons();
+
+    // 1. Live Post with token
+    document.getElementById('btn-submit-token-and-publish').addEventListener('click', async () => {
+      const newToken = (document.getElementById('quick-publish-token')?.value || '').trim();
+      if (!newToken) {
+        alert('অনুগ্রহ করে একটি বৈধ Facebook Access Token পেস্ট করুন অথবা নিচের সিমুলেশন মোড ব্যবহার করুন।');
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-token-and-publish');
+      btn.disabled = true;
+      btn.innerHTML = '<span>যাচাই ও পাবলিশ হচ্ছে...</span>';
+
+      try {
+        SocialManagerService.setFacebookToken(project, newToken);
+        storage.saveState();
+
+        this.closeModal();
+        this.showToast('টোকেন আপডেট হয়েছে! ভিডিও পাবলিশ করা হচ্ছে...', 'info');
+
+        const res = await SchedulerService.publishVideo(project, targetVideoId, (p) => {
+          if (p.message) this.showToast(p.message, 'info');
+        }, { token: newToken });
+
+        storage.saveState();
+        this.showToast(`🎉 "${res.video?.title || 'Video'}" সফলভাবে ফেসবুকে পাবলিশ হয়েছে!`, 'success');
+        this.render();
+      } catch (err) {
+        this.showToast(err.message, 'error');
+        this.openPublishTokenModal(project, targetVideoId, err.message);
+      }
+    });
+
+    // 2. Instant Simulation Mode
+    document.getElementById('btn-run-simulation-direct').addEventListener('click', async () => {
+      this.closeModal();
+      this.showToast('সিমুলেশন মোডে পাবলিশ শুরু হচ্ছে...', 'info');
+
+      try {
+        const res = await SchedulerService.publishVideo(project, targetVideoId, (p) => {
+          if (p.message) this.showToast(p.message, 'info');
+        }, { forceSimulation: true });
+
+        storage.saveState();
+        this.showToast(`🎉 "${res.video?.title || 'Video'}" সিমুলেশন মোডে সফলভাবে পাবলিশ হয়েছে!`, 'success');
+        this.render();
+      } catch (err) {
+        this.showToast(err.message, 'error');
+        this.render();
+      }
+    });
   }
 }
 

@@ -124,11 +124,18 @@ export class SocialManagerService {
   }
 
   /**
-   * Connect Facebook Page with verified details (NO tokens stored in localStorage)
+   * Connect Facebook Page with verified details and token preservation
    */
-  static connectFacebookPage(project, { pageId, pageName, handle = '', tokenConfigured = true }) {
+  static connectFacebookPage(project, { pageId, pageName, handle = '', token = '', tokenConfigured = true }) {
     let account = project.socialAccounts.find(a => a.id === 'facebook');
     const cleanHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${(pageName || 'chiku.bd').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+    const preservedToken = token || account?.accessToken || account?.token || localStorage.getItem('omni_fb_page_token') || '';
+
+    if (preservedToken) {
+      try {
+        localStorage.setItem('omni_fb_page_token', preservedToken);
+      } catch (e) {}
+    }
 
     if (!account) {
       account = {
@@ -139,7 +146,9 @@ export class SocialManagerService {
         handle: cleanHandle,
         pageId: pageId || null,
         pageName: pageName || 'Chiku bd',
-        tokenConfigured: tokenConfigured,
+        accessToken: preservedToken,
+        token: preservedToken,
+        tokenConfigured: tokenConfigured || !!preservedToken,
         connected: true,
         active: true,
         verified: true,
@@ -155,10 +164,13 @@ export class SocialManagerService {
       account.pageId = pageId || account.pageId || null;
       account.pageName = pageName || account.pageName || 'Chiku bd';
       account.handle = cleanHandle;
-      account.tokenConfigured = tokenConfigured;
+      if (preservedToken) {
+        account.accessToken = preservedToken;
+        account.token = preservedToken;
+      }
+      account.tokenConfigured = tokenConfigured || !!account.accessToken;
       account.followers = 'Page Connected';
       account.connectedAt = new Date().toISOString();
-      delete account.token; // Guarantee security: never store access tokens in localStorage
     }
 
     if (!project.scheduleSettings.targetPlatforms.includes('facebook')) {
@@ -254,5 +266,32 @@ export class SocialManagerService {
       this.connectPlatform(project, p.id, baseHandle);
     });
     return project.socialAccounts;
+  }
+
+  /**
+   * Get active Facebook Page token from state or localStorage
+   */
+  static getFacebookToken(project) {
+    const account = project?.socialAccounts?.find(a => a.id === 'facebook');
+    return account?.accessToken || account?.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_fb_page_token') : '') || '';
+  }
+
+  /**
+   * Update active Facebook Page token across state and localStorage
+   */
+  static setFacebookToken(project, token) {
+    if (!token) return;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('omni_fb_page_token', token.trim());
+      }
+    } catch (e) {}
+
+    const account = project?.socialAccounts?.find(a => a.id === 'facebook');
+    if (account) {
+      account.accessToken = token.trim();
+      account.token = token.trim();
+      account.tokenConfigured = true;
+    }
   }
 }

@@ -198,6 +198,7 @@ export default async function handler(req, res) {
         pages: sanitizedPages,
         selectedPageId: selectedPage.id,
         selectedPageName: selectedPage.name,
+        selectedPageToken: selectedPage.accessToken || '',
         scopes,
         missingScopes,
         message: `🎉 ${sanitizedPages.length}টি Facebook Page পাওয়া গেছে! লক্ষ্য পেজ: "${selectedPage.name}" (ID: ${selectedPage.id})।`
@@ -236,10 +237,12 @@ export default async function handler(req, res) {
               name: pageItem.name,
               category: pageItem.category,
               link: pageItem.link,
+              accessToken: pageItem.access_token,
               canPublish: true
             }],
             selectedPageId: pageItem.id,
             selectedPageName: pageItem.name,
+            selectedPageToken: pageItem.access_token,
             scopes,
             missingScopes,
             message: `✅ Facebook Page "${pageItem.name}" (ID: ${pageItem.id}) Page Access Token হিসেবে সরাসরি শনাক্ত ও প্রস্তুত হয়েছে!`

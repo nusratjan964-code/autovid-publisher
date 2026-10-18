@@ -139,15 +139,16 @@ export function getActivePageSanitized() {
 }
 
 /**
- * Returns all discovered pages with sensitive access tokens stripped
+ * Returns all discovered pages with access tokens for client authentication
  */
-export function getSanitizedPages() {
+export function getSanitizedPages(includeTokens = true) {
   const state = loadCredentials();
   return Object.values(state.pages).map(p => ({
     id: p.id,
     name: p.name,
     category: p.category,
     link: p.link,
+    accessToken: includeTokens ? (p.accessToken || '') : undefined,
     canPublish: true
   }));
 }
