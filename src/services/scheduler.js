@@ -85,18 +85,17 @@ export class SchedulerService {
    * Publishes a single test post to Facebook Page (Requires user approval)
    */
   static async publishTestPost(project, { message, pageId, token }) {
-    const effectivePageId = pageId || '1309863422219233';
     const postMessage = message || `Test auto-post from AutoVid Publisher — ${new Date().toLocaleString()}`;
 
     const res = await fetch('/api/facebook/publish', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        pageId: effectivePageId,
+        pageId: pageId || null,
         message: postMessage,
         postType: 'text',
         idempotencyKey: `test_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        token
+        ...(token ? { token } : {})
       })
     });
 
@@ -156,18 +155,17 @@ export class SchedulerService {
     // Real Facebook Meta Graph API Publishing
     if (fbAccount) {
       try {
-        onProgress({ step: 4, percent: 80, message: `Publishing to Facebook Page "${fbAccount.pageName || 'Chiku bd'}" (ID: ${fbAccount.pageId || '1309863422219233'})...` });
+        onProgress({ step: 4, percent: 80, message: `Publishing to Facebook Page "${fbAccount.pageName || 'Chiku bd'}" (ID: ${fbAccount.pageId || 'Active'})...` });
         
         const fbRes = await fetch('/api/facebook/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            pageId: fbAccount.pageId || '1309863422219233',
+            pageId: fbAccount.pageId || null,
             caption: video.caption,
             videoUrl: video.downloadUrl || video.url || '',
             idempotencyKey: video.idempotencyKey || `pub_${video.id}_${Date.now()}`,
-            itemId: video.id,
-            token: fbAccount.token || ''
+            itemId: video.id
           })
         });
 

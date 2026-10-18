@@ -18,7 +18,11 @@ function apiDevServerPlugin() {
         try {
           let handlerModule = null;
 
-          if (pathname === '/api/facebook/status') {
+          if (pathname === '/api/facebook/pages') {
+            handlerModule = await import('./api/facebook/pages.js');
+          } else if (pathname === '/api/facebook/select-page') {
+            handlerModule = await import('./api/facebook/select-page.js');
+          } else if (pathname === '/api/facebook/status') {
             handlerModule = await import('./api/facebook/status.js');
           } else if (pathname === '/api/facebook/publish') {
             handlerModule = await import('./api/facebook/publish.js');

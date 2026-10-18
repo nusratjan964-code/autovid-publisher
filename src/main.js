@@ -804,7 +804,7 @@ class OmniFlowApp {
 
                 ${platformDef.id === 'facebook' && account.connected ? `
                   <div style="margin-top:10px; padding:6px 10px; background:rgba(24, 119, 242, 0.06); border:1px solid rgba(24, 119, 242, 0.15); border-radius:6px; font-size:0.75rem; color:#1877F2; display:flex; justify-content:space-between; align-items:center;">
-                    <span>Page ID: <strong>${account.pageId || '1309863422219233'}</strong></span>
+                    <span>Page ID: <strong>${account.pageId || 'Pending Discovery'}</strong></span>
                     <span style="font-weight:600;">Meta Graph API v21.0</span>
                   </div>
                 ` : ''}
@@ -1319,71 +1319,82 @@ class OmniFlowApp {
   openFacebookConnectModal(platform) {
     const project = storage.getActiveProject();
     let account = project.socialAccounts.find(a => a.id === 'facebook');
-    const defaultPageId = account?.pageId || '1309863422219233';
-    const defaultPageName = account?.pageName || account?.name || 'Chiku bd';
-    const defaultHandle = account?.handle || '@chikubd';
-    const hasToken = !!(account?.token || account?.tokenConfigured);
+    const defaultPageId = account?.pageId || '';
+    const defaultPageName = account?.pageName || (account?.connected && account?.name !== 'Facebook Reels' ? account.name : 'Chiku bd');
+    const defaultHandle = account?.handle || (defaultPageName ? `@${defaultPageName.toLowerCase().replace(/[^a-z0-9]/g, '')}` : '@chikubd');
+    const isConnected = !!(account?.connected && account?.pageId);
 
     this.openModal(`
       <div class="modal-backdrop">
-        <div class="modal-card" style="max-width:560px;">
+        <div class="modal-card" style="max-width:620px;">
           <div class="modal-header">
             <h3 class="modal-title" style="display:flex; align-items:center; gap:10px;">
               <span style="width:34px; height:34px; border-radius:var(--radius-sm); background:#1877F2; color:white; display:flex; align-items:center; justify-content:center;">
                 <i data-lucide="facebook"></i>
               </span>
-              Connect Facebook Reels & Page
+              <span>Facebook Page & Reels Auto-Publishing</span>
             </h3>
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body">
-            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:16px; margin-bottom:18px;">
+            <!-- Active Connection Banner -->
+            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:14px 16px; margin-bottom:18px;">
               <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                 <div>
-                  <div style="font-weight:700; color:var(--text-primary); font-size:1.02rem; margin-bottom:2px;">
-                    Target Page: <span id="fb-display-page-name">${defaultPageName}</span>
+                  <div style="font-weight:700; color:var(--text-primary); font-size:1.02rem; margin-bottom:2px; display:flex; align-items:center; gap:8px;">
+                    <span>Target Page:</span>
+                    <span id="fb-display-page-name" style="color:#1877F2;">${defaultPageName}</span>
                   </div>
                   <div style="font-size:0.82rem; color:var(--text-muted);">
-                    ID: <code style="background:var(--bg-card); padding:2px 6px; border-radius:4px; font-weight:600;">${defaultPageId}</code> &bull; Handle: <span style="font-weight:600;">${defaultHandle}</span>
+                    ID: <code id="fb-display-page-id" style="background:var(--bg-card); padding:2px 6px; border-radius:4px; font-weight:600;">${defaultPageId || 'Not Selected'}</code> &bull; Handle: <span id="fb-display-handle" style="font-weight:600;">${defaultHandle}</span>
                   </div>
                 </div>
-                <span class="badge ${account?.connected ? 'badge-success' : 'badge-neutral'}" id="fb-live-badge">
-                  ${account?.connected ? 'Connected' : 'Not Linked'}
+                <span class="badge ${isConnected ? 'badge-success' : 'badge-neutral'}" id="fb-live-badge">
+                  ${isConnected ? 'Connected' : 'Not Linked'}
                 </span>
               </div>
             </div>
 
-            <div class="form-group">
+            <!-- Token Input Step -->
+            <div class="form-group" style="margin-bottom:14px;">
               <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
-                <span><strong>Facebook Page Access Token</strong></span>
+                <span><strong>Meta Graph API Access Token</strong> (User or Page Token)</span>
                 <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" style="font-size:0.78rem; color:#1877F2; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
-                  <span>Get Token from Graph Explorer</span>
+                  <span>Graph API Explorer</span>
                   <i data-lucide="external-link" style="width:12px; height:12px;"></i>
                 </a>
               </label>
-              <textarea class="form-input" id="fb-token-input" rows="3" style="font-family:monospace; font-size:0.82rem; resize:vertical;" placeholder="${hasToken ? '•••••••••••••••••••••••• (টোকেন সংরক্ষিত আছে — পরিবর্তন করতে নতুন টোকেন পেস্ট করুন)' : 'এখানে আপনার Facebook Page Access Token পেস্ট করুন (starts with EAAT...)'}">${account?.token || ''}</textarea>
-              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:6px; line-height:1.4;">
-                প্রয়োজনীয় পারমিশন: <code>pages_manage_posts</code>, <code>publish_video</code>, <code>pages_read_engagement</code>।
+              <textarea class="form-input" id="fb-token-input" rows="3" style="font-family:monospace; font-size:0.82rem; resize:vertical;" placeholder="${account?.tokenConfigured ? '•••••••••••••••••••••••• (টোকেন সার্ভারে সুরক্ষিত আছে — নতুন টোকেন দিলে আপডেট হবে)' : 'এখানে আপনার Access Token পেস্ট করুন (starts with EAAT... বা EAA...)'}"></textarea>
+              <div style="font-size:0.76rem; color:var(--text-muted); margin-top:5px; line-height:1.4;">
+                <span style="color:#1877F2; font-weight:600;">প্রয়োজনীয় পারমিশন:</span> <code>pages_show_list</code>, <code>pages_manage_posts</code>, <code>publish_video</code>, <code>pages_read_engagement</code>।
               </div>
             </div>
 
-            <div class="form-group">
-              <label class="form-label" style="display:flex; justify-content:space-between;">
-                <span>Facebook Page ID (বাধ্যতামূলক নয় - স্বয়ংক্রিয় সনাক্ত হবে)</span>
-                <span style="font-size:0.75rem; color:var(--text-muted);">Numeric ID</span>
-              </label>
-              <input type="text" class="form-input" id="fb-page-id-input" value="${defaultPageId}" placeholder="e.g. 1309863422219233" />
+            <!-- Discover Pages Button -->
+            <div style="display:flex; gap:10px; margin-bottom:16px;">
+              <button class="btn btn-primary btn-sm" id="btn-fb-discover" style="flex:1; background:#1877F2; border-color:#1877F2; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <i data-lucide="compass"></i>
+                <span>Discover Pages & Validate Token</span>
+              </button>
             </div>
 
+            <!-- Discovered Pages List Container -->
+            <div id="fb-pages-container" style="display:none; margin-bottom:16px; border:1px solid var(--border-color); border-radius:var(--radius-md); padding:12px; background:var(--bg-subtle);">
+              <div style="font-size:0.82rem; font-weight:700; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span>Select Your Facebook Page:</span>
+                <span id="fb-page-count" style="font-size:0.75rem; color:var(--text-muted);"></span>
+              </div>
+              <div id="fb-pages-list" style="display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto;"></div>
+            </div>
+
+            <!-- Diagnostics / Verification Results -->
             <div id="fb-verification-results" style="display:none; margin-bottom:16px;"></div>
 
-            <div style="display:flex; gap:10px; margin-top:10px;">
-              <button class="btn btn-outline btn-sm" id="btn-fb-verify" style="flex:1;">
-                <i data-lucide="shield-check"></i>
-                <span>Verify Token & Permissions</span>
-              </button>
-              <button class="btn btn-outline btn-sm" id="btn-fb-test-post" style="flex:1; border-color:rgba(24, 119, 242, 0.4); color:#1877F2;">
-                <i data-lucide="send"></i>
+            <!-- Test Post Action -->
+            <div style="border-top:1px dashed var(--border-color); padding-top:12px; margin-top:14px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.78rem; color:var(--text-muted);">নিরাপদ টেস্ট পোস্ট (ব্যবহারকারীর অনুমোদন সাপেক্ষে):</span>
+              <button class="btn btn-outline btn-sm" id="btn-fb-test-post" style="border-color:rgba(24, 119, 242, 0.4); color:#1877F2; display:flex; align-items:center; gap:5px;">
+                <i data-lucide="send" style="width:14px; height:14px;"></i>
                 <span>Publish Test Post</span>
               </button>
             </div>
@@ -1391,8 +1402,8 @@ class OmniFlowApp {
           <div class="modal-footer" style="display:flex; justify-content:space-between;">
             <button class="btn btn-outline btn-close-modal">Cancel</button>
             <button class="btn btn-primary" id="btn-save-fb-config" style="background:#1877F2; border-color:#1877F2;">
-              <i data-lucide="zap"></i>
-              <span>Connect with Access Token</span>
+              <i data-lucide="check-circle-2"></i>
+              <span>Connect Selected Page</span>
             </button>
           </div>
         </div>
@@ -1400,79 +1411,182 @@ class OmniFlowApp {
     `);
     this.refreshIcons();
 
-    // Verify token button
-    document.getElementById('btn-fb-verify').addEventListener('click', async () => {
-      const pageId = document.getElementById('fb-page-id-input').value.trim();
+    let discoveredPages = [];
+    let currentSelectedPageId = defaultPageId;
+    let currentSelectedPageName = defaultPageName;
+
+    // Helper to render discovered pages in radio list
+    const renderDiscoveredPages = (pages, targetSelectId = null) => {
+      const container = document.getElementById('fb-pages-container');
+      const listEl = document.getElementById('fb-pages-list');
+      const countEl = document.getElementById('fb-page-count');
+
+      if (!pages || pages.length === 0) {
+        container.style.display = 'none';
+        return;
+      }
+
+      container.style.display = 'block';
+      countEl.textContent = `${pages.length} Page(s) available`;
+
+      // Auto-select Chiku bd if available or targetSelectId
+      const chiku = pages.find(p => (p.name || '').toLowerCase().includes('chiku'));
+      const activeId = targetSelectId || (chiku ? chiku.id : pages[0].id);
+      currentSelectedPageId = activeId;
+
+      listEl.innerHTML = pages.map(p => {
+        const isChecked = p.id === activeId;
+        const isChiku = (p.name || '').toLowerCase().includes('chiku');
+        if (isChecked) {
+          currentSelectedPageName = p.name;
+        }
+
+        return `
+          <label style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:6px; background:${isChecked ? 'rgba(24, 119, 242, 0.08)' : 'var(--bg-card)'}; border:1px solid ${isChecked ? '#1877F2' : 'var(--border-color)'}; cursor:pointer; transition:all 0.15s ease;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <input type="radio" name="fb-page-choice" value="${p.id}" data-name="${p.name}" ${isChecked ? 'checked' : ''} style="cursor:pointer;" />
+              <div>
+                <div style="font-weight:700; font-size:0.88rem; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+                  <span>${p.name}</span>
+                  ${isChiku ? `<span style="font-size:0.68rem; background:#1877F2; color:white; padding:1px 6px; border-radius:10px; font-weight:600;">Target Page</span>` : ''}
+                </div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">
+                  ID: <code style="font-weight:600;">${p.id}</code> &bull; ${p.category || 'Facebook Business Page'}
+                </div>
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <span style="font-size:0.72rem; color:${p.canPublish ? '#10B981' : '#F59E0B'}; font-weight:600; display:flex; align-items:center; gap:4px;">
+                <i data-lucide="${p.canPublish ? 'check-circle' : 'alert-circle'}" style="width:12px; height:12px;"></i>
+                <span>${p.canPublish ? 'Publishing Ready' : 'Read Only'}</span>
+              </span>
+            </div>
+          </label>
+        `;
+      }).join('');
+
+      this.refreshIcons();
+
+      // Listen for page selection changes
+      listEl.querySelectorAll('input[name="fb-page-choice"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          currentSelectedPageId = e.target.value;
+          currentSelectedPageName = e.target.getAttribute('data-name');
+          document.getElementById('fb-display-page-name').textContent = currentSelectedPageName;
+          document.getElementById('fb-display-page-id').textContent = currentSelectedPageId;
+          const cleanHandle = `@${currentSelectedPageName.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+          document.getElementById('fb-display-handle').textContent = cleanHandle;
+          renderDiscoveredPages(pages, currentSelectedPageId);
+        });
+      });
+    };
+
+    // Pre-load stored pages from server if any exist
+    SocialManagerService.getDiscoveredFacebookPages().then(res => {
+      if (res.success && res.pages && res.pages.length > 0) {
+        discoveredPages = res.pages;
+        renderDiscoveredPages(discoveredPages, defaultPageId);
+      }
+    }).catch(() => {});
+
+    // Discover Pages & Validate Token Button
+    document.getElementById('btn-fb-discover').addEventListener('click', async () => {
       const tokenInput = document.getElementById('fb-token-input').value.trim();
-      const token = tokenInput || account?.token || '';
       const resultBox = document.getElementById('fb-verification-results');
       resultBox.style.display = 'block';
       resultBox.innerHTML = `
         <div style="background:var(--bg-subtle); padding:12px; border-radius:var(--radius-md); font-size:0.84rem; display:flex; align-items:center; gap:8px;">
-          <span>Contacting Meta Graph API v21.0...</span>
+          <span>Contacting Meta Graph API v21.0 (/me/accounts & /debug_token)...</span>
         </div>
       `;
 
-      const status = await SocialManagerService.checkFacebookStatus(pageId, token);
+      const btn = document.getElementById('btn-fb-discover');
+      const originalBtnText = btn.innerHTML;
+      btn.innerHTML = `<span>Discovering Pages...</span>`;
+      btn.disabled = true;
 
-      if (status.success && status.connected) {
+      const discovery = await SocialManagerService.discoverFacebookPages(tokenInput);
+      btn.innerHTML = originalBtnText;
+      btn.disabled = false;
+      this.refreshIcons();
+
+      if (discovery.success && discovery.pages && discovery.pages.length > 0) {
+        discoveredPages = discovery.pages;
+        renderDiscoveredPages(discoveredPages, discovery.selectedPageId);
+
+        const activePage = discoveredPages.find(p => p.id === currentSelectedPageId) || discoveredPages[0];
+        document.getElementById('fb-display-page-name').textContent = activePage.name;
+        document.getElementById('fb-display-page-id').textContent = activePage.id;
+        document.getElementById('fb-display-handle').textContent = `@${activePage.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        document.getElementById('fb-live-badge').className = 'badge badge-success';
+        document.getElementById('fb-live-badge').textContent = 'Pages Discovered';
+
         resultBox.innerHTML = `
-          <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem; color:var(--text-primary);">
-            <div style="font-weight:700; color:#10B981; margin-bottom:4px;">✅ Live Graph API Connection Verified</div>
-            <div>Page: <strong>${status.pageName}</strong> (ID: ${status.pageId})</div>
-            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">
-              Permissions: ${status.scopes?.join(', ') || 'All verified'}
+          <div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem; color:var(--text-primary);">
+            <div style="font-weight:700; color:#10B981; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+              <i data-lucide="check-check" style="width:16px; height:16px;"></i>
+              <span>Token Validated & ${discovery.pages.length} Page(s) Discovered</span>
             </div>
+            ${discovery.userName ? `<div style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:4px;">Authenticated Meta User: <strong>${discovery.userName}</strong> (User ID: <code>${discovery.userId}</code>)</div>` : ''}
+            <div style="font-size:0.78rem; color:var(--text-muted);">
+              Token Type: <strong>${discovery.tokenType || 'PAGE'}</strong> &bull; Permissions: ${discovery.scopes?.join(', ') || 'All Verified'}
+            </div>
+            ${discovery.missingScopes?.length > 0 ? `
+              <div style="font-size:0.76rem; color:#EF4444; margin-top:4px;">
+                Missing Recommended Permissions: ${discovery.missingScopes.join(', ')}
+              </div>
+            ` : ''}
           </div>
         `;
-        document.getElementById('fb-display-page-name').textContent = status.pageName;
-        document.getElementById('fb-page-id-input').value = status.pageId;
-        document.getElementById('fb-live-badge').className = 'badge badge-success';
-        document.getElementById('fb-live-badge').textContent = 'Verified Active';
+        this.refreshIcons();
       } else {
         resultBox.innerHTML = `
           <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem; color:var(--text-primary);">
-            <div style="font-weight:700; color:#EF4444; margin-bottom:4px;">⚠️ Meta Graph API Status: ${status.status || 'Failed'}</div>
-            <div style="color:var(--text-secondary); margin-bottom:4px;">${status.message || status.error}</div>
-            ${status.errorCode ? `<div style="font-size:0.75rem; color:var(--text-muted);">Error Code: ${status.errorCode} (Subcode: ${status.errorSubcode || 'N/A'})</div>` : ''}
+            <div style="font-weight:700; color:#EF4444; margin-bottom:4px;">⚠️ Discovery Status: ${discovery.status || 'Failed'}</div>
+            <div style="color:var(--text-secondary); margin-bottom:6px; white-space:pre-line;">${discovery.message || discovery.error}</div>
+            ${discovery.errorCode ? `<div style="font-size:0.75rem; color:var(--text-muted);">Error Code: ${discovery.errorCode} (Subcode: ${discovery.errorSubcode || 'N/A'})</div>` : ''}
           </div>
         `;
         document.getElementById('fb-live-badge').className = 'badge badge-danger';
-        document.getElementById('fb-live-badge').textContent = status.status || 'Action Required';
+        document.getElementById('fb-live-badge').textContent = discovery.status || 'Action Required';
       }
     });
 
-    // Send Test Post Button (With approval prompt)
+    // Send Real Test Post (Requires explicit user confirmation)
     document.getElementById('btn-fb-test-post').addEventListener('click', async () => {
-      const pageId = document.getElementById('fb-page-id-input').value.trim() || defaultPageId;
-      const tokenInput = document.getElementById('fb-token-input').value.trim();
-      const token = tokenInput || account?.token || '';
+      const pageId = currentSelectedPageId || defaultPageId;
+      const pageName = currentSelectedPageName || defaultPageName;
 
-      const approved = window.confirm(`Approve Test Post:\n\nDo you approve publishing a real test text post to Facebook Page "${defaultPageName}" (ID: ${pageId})?\n\nThis will make a live Graph API request.`);
+      if (!pageId) {
+        this.showToast('Please discover and select a Facebook Page first.', 'warning');
+        return;
+      }
+
+      const approved = window.confirm(`Approve Test Post:\n\nDo you approve publishing a real test text post to Facebook Page "${pageName}" (ID: ${pageId})?\n\nThis will make a live Graph API request.`);
       if (!approved) return;
 
       const resultBox = document.getElementById('fb-verification-results');
       resultBox.style.display = 'block';
       resultBox.innerHTML = `
         <div style="background:var(--bg-subtle); padding:12px; border-radius:var(--radius-md); font-size:0.84rem; display:flex; align-items:center; gap:8px;">
-          <span>Publishing test text post to Facebook Page...</span>
+          <span>Publishing test text post to Facebook Page "${pageName}"...</span>
         </div>
       `;
 
       try {
         const testRes = await SchedulerService.publishTestPost(project, {
           pageId,
-          token,
-          message: `AutoVid Publisher Test Post — ${new Date().toLocaleString()}`
+          message: `AutoVid Publisher Test Post to ${pageName} — ${new Date().toLocaleString()}`
         });
 
         if (testRes.success) {
           resultBox.innerHTML = `
             <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:var(--radius-md); padding:12px; font-size:0.84rem;">
-              <div style="font-weight:700; color:#10B981; margin-bottom:4px;">🎉 Test Post Published Successfully!</div>
+              <div style="font-weight:700; color:#10B981; margin-bottom:4px;">🎉 Real Test Post Published to Facebook!</div>
+              <div>Page: <strong>${pageName}</strong> (ID: <code>${pageId}</code>)</div>
               <div>Post ID: <code>${testRes.postId}</code></div>
               <div style="margin-top:6px;">
-                <a href="${testRes.postUrl}" target="_blank" style="color:#1877F2; text-decoration:underline; font-weight:600;">
+                <a href="${testRes.postUrl}" target="_blank" rel="noopener noreferrer" style="color:#1877F2; text-decoration:underline; font-weight:600;">
                   View Live Post on Facebook &rarr;
                 </a>
               </div>
@@ -1498,34 +1612,38 @@ class OmniFlowApp {
       }
     });
 
-    // Save and Connect Page with Auto-Verification
+    // Connect Selected Page Button
     document.getElementById('btn-save-fb-config').addEventListener('click', async () => {
-      const pageId = document.getElementById('fb-page-id-input').value.trim();
-      const tokenInput = document.getElementById('fb-token-input').value.trim();
-      const token = tokenInput || account?.token || '';
+      const selectedId = currentSelectedPageId;
+      const selectedName = currentSelectedPageName || defaultPageName;
 
-      if (!token) {
-        this.showToast('অনুগ্রহ করে একটি Facebook Page Access Token দিন।', 'warning');
+      if (!selectedId) {
+        this.showToast('অনুগ্রহ করে টোকেন দিয়ে প্রথমে একটি Facebook Page আবিষ্কার ও নির্বাচন করুন।', 'warning');
         return;
       }
 
       const btn = document.getElementById('btn-save-fb-config');
       const originalText = btn.innerHTML;
-      btn.innerHTML = `<span>যাচাই করা হচ্ছে...</span>`;
+      btn.innerHTML = `<span>সংযুক্ত করা হচ্ছে...</span>`;
       btn.disabled = true;
 
-      const status = await SocialManagerService.checkFacebookStatus(pageId, token);
+      // Select page on server
+      await SocialManagerService.selectFacebookPage(selectedId);
+
+      // Verify page status with server-side token
+      const status = await SocialManagerService.checkFacebookStatus(selectedId);
       btn.innerHTML = originalText;
       btn.disabled = false;
 
-      const finalPageId = status.pageId || pageId || '1309863422219233';
-      const finalPageName = status.pageName || defaultPageName;
+      const finalPageId = status.pageId || selectedId;
+      const finalPageName = status.pageName || selectedName;
+      const cleanHandle = `@${finalPageName.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
       SocialManagerService.connectFacebookPage(project, {
         pageId: finalPageId,
         pageName: finalPageName,
-        token: token,
-        handle: `@${finalPageName.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+        handle: cleanHandle,
+        tokenConfigured: true
       });
 
       storage.saveState();

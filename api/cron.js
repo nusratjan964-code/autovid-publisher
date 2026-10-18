@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     const mockReq = {
       method: 'POST',
       body: {
-        pageId: item.pageId || process.env.FB_PAGE_ID || '1309863422219233',
+        pageId: item.pageId || process.env.FB_PAGE_ID || null,
         message: item.caption,
         videoUrl: item.videoUrl,
         postType: item.videoUrl ? 'video' : 'text',

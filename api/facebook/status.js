@@ -1,3 +1,9 @@
+import {
+  getPageAccessToken,
+  getActivePageSanitized,
+  getCredentialsState
+} from './credentials.js';
+
 const GRAPH_VERSION = 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
@@ -23,20 +29,22 @@ export default async function handler(req, res) {
   }
 
   const queryOrBody = req.method === 'POST' ? (req.body || {}) : req.query;
-  const rawPageId = queryOrBody.pageId || process.env.FB_PAGE_ID || '1309863422219233';
-  let pageId = cleanPageId(rawPageId);
-  const token = (queryOrBody.token || req.headers['x-fb-token'] || process.env.FB_PAGE_ACCESS_TOKEN || '').trim();
+  const activePage = getActivePageSanitized();
+  const rawPageId = queryOrBody.pageId || activePage?.pageId || process.env.FB_PAGE_ID || '';
+  const pageId = cleanPageId(rawPageId);
+  const token = (queryOrBody.token || req.headers['x-fb-token'] || getPageAccessToken(pageId) || '').trim();
 
+  // If no token at all
   if (!token) {
     return res.status(200).json({
       success: true,
       connected: false,
       status: 'MISSING_TOKEN',
-      pageId: pageId || '1309863422219233',
-      pageName: 'Chiku bd',
+      pageId: pageId || null,
+      pageName: activePage?.pageName || null,
       tokenValid: false,
       canPost: false,
-      message: 'Facebook Page Access Token অনুপস্থিত। অনুগ্রহ করে Meta Graph Explorer থেকে একটি Page Access Token দিন।'
+      message: 'Facebook Access Token অনুপস্থিত। অনুগ্রহ করে Page Discovery টুল দিয়ে পেজ কানেক্ট করুন।'
     });
   }
 
@@ -50,67 +58,98 @@ export default async function handler(req, res) {
         debugInfo = debugJson.data;
       }
     } catch (e) {
-      console.warn('[Facebook Status] debug_token query notice:', e.message);
+      console.warn('[Facebook Status] debug_token notice:', e.message);
     }
 
-    // 2. Try querying /me first (Handles Page Tokens automatically)
-    let pageData = null;
-    let effectivePageId = pageId;
+    if (debugInfo && debugInfo.is_valid === false) {
+      const err = debugInfo.error || {};
+      const isExpired = err.code === 190 || err.subcode === 463;
+      return res.status(200).json({
+        success: false,
+        connected: false,
+        status: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+        pageId,
+        tokenValid: false,
+        canPost: false,
+        errorCode: err.code || 190,
+        errorSubcode: err.subcode || null,
+        error: err.message || 'Token is invalid or expired',
+        message: isExpired
+          ? 'Facebook Access Token-এর মেয়াদ শেষ (Code 190, Subcode 463)। অনুগ্রহ করে নতুন টোকেন জেনারেট করুন।'
+          : `Facebook Token অকার্যকর: ${err.message}`
+      });
+    }
 
+    // 2. Query /me to understand token scope
+    let meData = null;
     try {
-      const meRes = await fetch(`${GRAPH_BASE}/me?fields=id,name,link,is_published,tasks&access_token=${encodeURIComponent(token)}`);
-      const meData = await meRes.json();
-      if (meRes.ok && meData.id) {
-        // If debugInfo says type is PAGE or tasks exist, this token belongs to the page
-        if (debugInfo?.type === 'PAGE' || meData.tasks || meData.id === pageId) {
-          pageData = meData;
-          effectivePageId = meData.id;
-        }
-      }
+      const meRes = await fetch(`${GRAPH_BASE}/me?fields=id,name,category,tasks,is_published,link&access_token=${encodeURIComponent(token)}`);
+      meData = await meRes.json();
+      if (!meRes.ok) meData = null;
     } catch (e) {}
 
-    // 3. If pageData not resolved via /me, query specified pageId directly
-    if (!pageData && pageId) {
-      const pageRes = await fetch(`${GRAPH_BASE}/${encodeURIComponent(pageId)}?fields=id,name,link,is_published,tasks&access_token=${encodeURIComponent(token)}`);
+    // Check if token belongs directly to a Page
+    const isDirectPageToken = debugInfo?.type === 'PAGE' || !!meData?.category || !!meData?.tasks;
+
+    let targetPageId = pageId;
+    let pageData = null;
+
+    if (isDirectPageToken && meData?.id) {
+      // Direct Page Access Token
+      pageData = meData;
+      targetPageId = meData.id;
+    } else if (targetPageId) {
+      // Query specific Page with the token
+      const pageRes = await fetch(`${GRAPH_BASE}/${encodeURIComponent(targetPageId)}?fields=id,name,link,is_published,tasks&access_token=${encodeURIComponent(token)}`);
       const pData = await pageRes.json();
+
       if (pageRes.ok && pData.id) {
         pageData = pData;
-        effectivePageId = pData.id;
       } else if (pData.error) {
-        // Check if token is user token and has managed pages
-        try {
-          const accountsRes = await fetch(`${GRAPH_BASE}/me/accounts?fields=id,name,access_token&access_token=${encodeURIComponent(token)}`);
-          const accountsData = await accountsRes.json();
-          if (accountsData.data && accountsData.data.length > 0) {
-            const foundPage = accountsData.data.find(p => p.id === pageId) || accountsData.data[0];
-            pageData = {
-              id: foundPage.id,
-              name: foundPage.name,
-              is_published: true
-            };
-            effectivePageId = foundPage.id;
-          }
-        } catch (e) {}
+        const err = pData.error;
 
-        if (!pageData) {
-          const err = pData.error || {};
-          const isExpired = err.code === 190 || err.error_subcode === 463;
+        // If the query failed because targetPageId was actually a User ID (Error Code 100, Subcode 33)
+        if (err.code === 100 && err.error_subcode === 33) {
           return res.status(200).json({
             success: false,
             connected: false,
-            status: isExpired ? 'TOKEN_EXPIRED' : 'AUTH_ERROR',
-            pageId,
-            tokenValid: false,
+            status: 'USER_ID_PROVIDED',
+            pageId: targetPageId,
+            tokenValid: true,
             canPost: false,
-            errorCode: err.code || null,
-            errorSubcode: err.error_subcode || null,
-            error: err.message || 'Failed to authenticate with Facebook Graph API',
-            message: isExpired
-              ? 'Facebook Page Access Token expired (Code 190, Subcode 463)। অনুগ্রহ করে Meta Graph Explorer থেকে নতুন Page Access Token নিন।'
-              : `Facebook API ত্রুটি: ${err.message || 'অনুমতি মেলেনি'}`
+            errorCode: 100,
+            errorSubcode: 33,
+            error: err.message,
+            message: `আইডি '${targetPageId}' কোনো Facebook Page নয় (বা User Profile ID)। অনুগ্রহ করে Page Discovery ব্যবহার করে আপনার কাঙ্ক্ষিত পেজ (যেমন 'Chiku bd') নির্বাচন করুন।`
           });
         }
+
+        const isExpired = err.code === 190 || err.error_subcode === 463;
+        return res.status(200).json({
+          success: false,
+          connected: false,
+          status: isExpired ? 'TOKEN_EXPIRED' : 'AUTH_ERROR',
+          pageId: targetPageId,
+          tokenValid: !isExpired,
+          canPost: false,
+          errorCode: err.code || null,
+          errorSubcode: err.error_subcode || null,
+          error: err.message || 'Failed to authenticate Page',
+          message: isExpired
+            ? 'Facebook Access Token expired (Code 190)। অনুগ্রহ করে নতুন টোকেন নিন।'
+            : `Facebook API ত্রুটি (${err.code}): ${err.message}`
+        });
       }
+    } else {
+      // Neither pageId provided nor direct page token
+      return res.status(200).json({
+        success: false,
+        connected: false,
+        status: 'PAGE_NOT_SPECIFIED',
+        tokenValid: true,
+        canPost: false,
+        message: 'কোনো Facebook Page নির্বাচন করা হয়নি। অনুগ্রহ করে Page Discovery ব্যবহার করে আপনার পেজটি নির্বাচন করুন।'
+      });
     }
 
     if (!pageData) {
@@ -118,10 +157,10 @@ export default async function handler(req, res) {
         success: false,
         connected: false,
         status: 'PAGE_NOT_FOUND',
-        pageId,
-        tokenValid: false,
+        pageId: targetPageId,
+        tokenValid: true,
         canPost: false,
-        message: 'Facebook Page যাচাই করা সম্ভব হয়নি। অনুগ্রহ করে Page ID এবং Access Token সঠিক কিনা নিশ্চিত করুন।'
+        message: `Facebook Page (ID: ${targetPageId}) যাচাই করা সম্ভব হয়নি। সঠিক Page ID অথবা Discovery তালিকা থেকে নির্বাচন করুন।`
       });
     }
 
@@ -131,20 +170,24 @@ export default async function handler(req, res) {
     const missingScopes = requiredScopes.filter(s => !scopes.includes(s));
     const tokenType = debugInfo?.type || (pageData.tasks ? 'PAGE' : 'USER');
 
+    const canPost = (tokenType === 'PAGE' || missingScopes.length === 0) &&
+      (!Array.isArray(pageData.tasks) || pageData.tasks.some(t => ['CREATE_CONTENT', 'MANAGE', 'MODERATE'].includes(t.toUpperCase())));
+
     return res.status(200).json({
       success: true,
       connected: true,
       status: 'VERIFIED',
-      pageId: pageData.id || effectivePageId,
+      pageId: pageData.id || targetPageId,
       pageName: pageData.name || 'Facebook Page',
-      pageLink: pageData.link || `https://facebook.com/${effectivePageId}`,
+      pageLink: pageData.link || `https://facebook.com/${targetPageId}`,
       isPublished: pageData.is_published ?? true,
       tokenValid: true,
       tokenType,
       expiresAt: debugInfo?.expires_at ? new Date(debugInfo.expires_at * 1000).toISOString() : 'Permanent (Page Token)',
       scopes,
       missingScopes,
-      canPost: missingScopes.length === 0 || tokenType === 'PAGE',
+      tasks: pageData.tasks || [],
+      canPost,
       message: `✅ Facebook Page "${pageData.name}" (ID: ${pageData.id}) সফলভাবে যাচাইকৃত ও প্রস্তুত!`
     });
 

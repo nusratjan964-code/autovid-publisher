@@ -48,7 +48,7 @@ export function enqueueItems(newItems = []) {
         videoUrl: item.videoUrl || item.downloadUrl || '',
         scheduledDate: item.scheduledDate || new Date().toISOString(),
         platforms: item.platforms || ['Facebook'],
-        pageId: item.pageId || process.env.FB_PAGE_ID || '1309863422219233',
+        pageId: item.pageId || process.env.FB_PAGE_ID || null,
         status: item.status || 'Pending', // Pending | Processing | Published | Failed
         idempotencyKey: item.idempotencyKey || `key_${item.id}_${item.scheduledDate}`,
         retries: 0,

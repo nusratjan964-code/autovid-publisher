@@ -1,4 +1,5 @@
 import { isIdempotencyKeyProcessed, updateQueueItem } from '../queue.js';
+import { getPageAccessToken, getActivePageSanitized } from './credentials.js';
 
 const GRAPH_VERSION = 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -20,7 +21,6 @@ function cleanPageId(raw) {
 function resolveDirectMediaUrl(url) {
   if (!url) return '';
   const str = String(url).trim();
-  // Extract fileId from Google Drive URLs
   const driveMatch = str.match(/\/d\/([a-zA-Z0-9_-]+)/) || str.match(/id=([a-zA-Z0-9_-]+)/);
   if (driveMatch) {
     const fileId = driveMatch[1];
@@ -49,9 +49,23 @@ export default async function handler(req, res) {
     token: requestToken
   } = req.body || {};
 
-  const pageId = cleanPageId(rawPageId || process.env.FB_PAGE_ID || '1309863422219233');
+  const activePage = getActivePageSanitized();
+  const pageId = cleanPageId(rawPageId || activePage?.pageId || process.env.FB_PAGE_ID || '');
   const postText = (message || caption || '').trim();
-  const token = (requestToken || req.headers['x-fb-token'] || process.env.FB_PAGE_ACCESS_TOKEN || '').trim();
+  const token = (requestToken || req.headers['x-fb-token'] || getPageAccessToken(pageId) || '').trim();
+
+  // Validate Page ID presence
+  if (!pageId) {
+    if (itemId) {
+      updateQueueItem(itemId, { status: 'Failed', error: 'Facebook Page ID not configured' });
+    }
+    return res.status(400).json({
+      success: false,
+      status: 'Failed',
+      error: 'Facebook Page ID not configured',
+      message: 'কোনো Facebook Page নির্বাচন করা হয়নি। অনুগ্রহ করে Social Media ট্যাব থেকে পেজ কানেক্ট করুন।'
+    });
+  }
 
   // 1. Idempotency Check (Prevent duplicate posts)
   if (idempotencyKey) {
@@ -65,12 +79,12 @@ export default async function handler(req, res) {
         postId: existingResult.postId,
         postUrl: existingResult.postUrl,
         publishedAt: existingResult.publishedAt,
-        message: 'Post was already published previously (duplicate prevented).'
+        message: 'পোস্টটি ইতোমধ্যেই প্রকাশিত হয়েছে (ডুপ্লিকেট প্রতিরোধ করা হয়েছে)।'
       });
     }
   }
 
-  // 2. Validate token
+  // 2. Validate token presence
   if (!token) {
     if (itemId) {
       updateQueueItem(itemId, { status: 'Failed', error: 'Facebook Page Access Token missing' });
@@ -79,7 +93,7 @@ export default async function handler(req, res) {
       success: false,
       status: 'Failed',
       error: 'Facebook Page Access Token missing',
-      message: 'Facebook Page Access Token অনুপস্থিত। অনুগ্রহ করে Social Media ট্যাবে একটি বৈধ Page Access Token দিন।'
+      message: 'Facebook Page Access Token পাওয়া যায়নি। অনুগ্রহ করে Social Media ট্যাবে পেজটি পুনরায় কানেক্ট করুন।'
     });
   }
 
@@ -109,7 +123,7 @@ export default async function handler(req, res) {
 
     if (effectiveType === 'text') {
       if (!postText) {
-        throw new Error('পোস্ট ক্যাপশন বা টেক্সট খালি রাখা যাবে না।');
+        throw new Error('পোস্ট টেক্সট বা ক্যাপশন খালি রাখা যাবে না।');
       }
       endpoint = `${GRAPH_BASE}/${encodeURIComponent(pageId)}/feed`;
       formData.append('message', postText);
@@ -141,7 +155,7 @@ export default async function handler(req, res) {
       const isExpired = fbErr.code === 190 || fbErr.error_subcode === 463;
       const errorMsg = fbErr.message || 'Unknown error occurred while publishing to Facebook';
 
-      console.error(`[Facebook Publish] Error from Meta Graph API (Code ${fbErr.code}): ${errorMsg}`);
+      console.error(`[Facebook Publish] Error from Meta Graph API (Code ${fbErr.code}, Subcode ${fbErr.error_subcode}): ${errorMsg}`);
 
       if (itemId) {
         updateQueueItem(itemId, {
@@ -151,20 +165,30 @@ export default async function handler(req, res) {
         });
       }
 
+      let actionableMessage = `Facebook Graph API ত্রুটি (${fbErr.code}): ${errorMsg}`;
+      if (isExpired) {
+        actionableMessage = 'Facebook Page Access Token expired (Code 190)। অনুগ্রহ করে নতুন টোকেন দিয়ে পেজ কানেক্ট করুন।';
+      } else if (fbErr.code === 100 && fbErr.error_subcode === 33) {
+        actionableMessage = `Page ID '${pageId}' খুঁজে পাওয়া যায়নি বা এটি কোনো User Profile ID। অনুগ্রহ করে Social Media ট্যাবে সঠিক Page ID নিশ্চিত করুন।`;
+      } else if (fbErr.code === 200) {
+        actionableMessage = 'অনুমতির অভাব: টোকেনে pages_manage_posts অথবা publish_video অনুমতি নেই।';
+      }
+
       return res.status(graphRes.status || 400).json({
         success: false,
         status: 'Failed',
         errorCode: fbErr.code,
         errorSubcode: fbErr.error_subcode,
         error: errorMsg,
-        message: isExpired
-          ? 'Facebook Page Access Token expired (Code 190)। অনুগ্রহ করে Meta Graph Explorer থেকে pages_manage_posts সহ নতুন টোকেন নিন।'
-          : `Facebook Graph API ত্রুটি (${fbErr.code}): ${errorMsg}`
+        message: actionableMessage
       });
     }
 
     const postId = graphData.id || graphData.post_id;
-    const postUrl = `https://www.facebook.com/${postId.includes('_') ? postId : `${pageId}_${postId}`}`;
+    let postUrl = `https://www.facebook.com/${postId.includes('_') ? postId : `${pageId}_${postId}`}`;
+    if (effectiveType === 'video' && graphData.id) {
+      postUrl = `https://www.facebook.com/${pageId}/videos/${graphData.id}`;
+    }
 
     console.log(`[Facebook Publish] Successfully published to Facebook! Post ID: ${postId}`);
 
@@ -201,7 +225,7 @@ export default async function handler(req, res) {
       success: false,
       status: 'Failed',
       error: err.message,
-      message: `Publishing failed: ${err.message}`
+      message: `পোস্ট প্রকাশ ব্যর্থ হয়েছে: ${err.message}`
     });
   }
 }

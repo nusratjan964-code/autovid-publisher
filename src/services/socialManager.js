@@ -53,6 +53,55 @@ export const AVAILABLE_PLATFORMS = [
 
 export class SocialManagerService {
   /**
+   * Discover Facebook Pages managed by authenticated user via /me/accounts
+   */
+  static async discoverFacebookPages(token = '') {
+    try {
+      const res = await fetch('/api/facebook/pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      return await res.json();
+    } catch (err) {
+      return {
+        success: false,
+        status: 'NETWORK_ERROR',
+        error: err.message,
+        message: `Failed to contact Facebook API server: ${err.message}`
+      };
+    }
+  }
+
+  /**
+   * Get already discovered Facebook Pages stored on the server
+   */
+  static async getDiscoveredFacebookPages() {
+    try {
+      const res = await fetch('/api/facebook/pages');
+      return await res.json();
+    } catch (err) {
+      return { success: false, pages: [], message: err.message };
+    }
+  }
+
+  /**
+   * Select and activate a discovered Facebook Page on the server
+   */
+  static async selectFacebookPage(pageId) {
+    try {
+      const res = await fetch('/api/facebook/select-page', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId })
+      });
+      return await res.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Verify Facebook Page connection via serverless API
    */
   static async checkFacebookStatus(pageId = '', token = '') {
@@ -75,11 +124,11 @@ export class SocialManagerService {
   }
 
   /**
-   * Connect Facebook Page with verified details
+   * Connect Facebook Page with verified details (NO tokens stored in localStorage)
    */
-  static connectFacebookPage(project, { pageId, pageName, token = '', handle = '' }) {
+  static connectFacebookPage(project, { pageId, pageName, handle = '', tokenConfigured = true }) {
     let account = project.socialAccounts.find(a => a.id === 'facebook');
-    const cleanHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${(pageName || 'facebookpage').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+    const cleanHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${(pageName || 'chiku.bd').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
     if (!account) {
       account = {
@@ -88,10 +137,9 @@ export class SocialManagerService {
         icon: 'facebook',
         color: '#1877F2',
         handle: cleanHandle,
-        pageId: pageId || '1309863422219233',
+        pageId: pageId || null,
         pageName: pageName || 'Chiku bd',
-        tokenConfigured: !!token,
-        token: token || '',
+        tokenConfigured: tokenConfigured,
         connected: true,
         active: true,
         verified: true,
@@ -104,15 +152,13 @@ export class SocialManagerService {
       account.connected = true;
       account.active = true;
       account.verified = true;
-      account.pageId = pageId || account.pageId || '1309863422219233';
+      account.pageId = pageId || account.pageId || null;
       account.pageName = pageName || account.pageName || 'Chiku bd';
       account.handle = cleanHandle;
-      if (token) {
-        account.token = token;
-        account.tokenConfigured = true;
-      }
+      account.tokenConfigured = tokenConfigured;
       account.followers = 'Page Connected';
       account.connectedAt = new Date().toISOString();
+      delete account.token; // Guarantee security: never store access tokens in localStorage
     }
 
     if (!project.scheduleSettings.targetPlatforms.includes('facebook')) {
@@ -172,8 +218,10 @@ export class SocialManagerService {
       account.handle = '';
       account.followers = '0';
       if (platformId === 'facebook') {
-        account.token = '';
+        delete account.token;
         account.tokenConfigured = false;
+        account.pageId = null;
+        account.pageName = '';
       }
     }
     project.scheduleSettings.targetPlatforms = project.scheduleSettings.targetPlatforms.filter(id => id !== platformId);

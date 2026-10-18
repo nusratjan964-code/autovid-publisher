@@ -22,7 +22,26 @@ class StorageService {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        // Security sanitization: ensure tokens are never retained in localStorage
+        if (Array.isArray(parsed?.projects)) {
+          parsed.projects.forEach(p => {
+            if (Array.isArray(p.socialAccounts)) {
+              p.socialAccounts.forEach(a => {
+                if (a.id === 'facebook') {
+                  if (a.token) {
+                    a.tokenConfigured = true;
+                    delete a.token;
+                  }
+                  if (a.name === 'Facebook Reels') {
+                    a.name = 'Facebook Reels & Page';
+                  }
+                }
+              });
+            }
+          });
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn('Could not load from localStorage, initializing clean state', e);
@@ -106,7 +125,7 @@ class StorageService {
         { id: 'insta', name: 'Instagram Reels', icon: 'instagram', color: '#E1306C', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
         { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
         { id: 'tiktok', name: 'TikTok', icon: 'video', color: '#000000', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
-        { id: 'facebook', name: 'Facebook Reels', icon: 'facebook', color: '#1877F2', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
+        { id: 'facebook', name: 'Facebook Reels & Page', icon: 'facebook', color: '#1877F2', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
         { id: 'linkedin', name: 'LinkedIn Video', icon: 'linkedin', color: '#0A66C2', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
         { id: 'twitter', name: 'X / Twitter', icon: 'twitter', color: '#0f172a', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' }
       ],
