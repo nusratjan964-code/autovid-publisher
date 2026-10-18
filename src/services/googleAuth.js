@@ -42,10 +42,7 @@ export class GoogleAuthService {
         client_id: clientId,
         scope: [
           'https://www.googleapis.com/auth/youtube.upload',
-          'https://www.googleapis.com/auth/youtube.readonly',
-          'https://www.googleapis.com/auth/drive.readonly',
-          'https://www.googleapis.com/auth/userinfo.profile',
-          'https://www.googleapis.com/auth/userinfo.email'
+          'https://www.googleapis.com/auth/youtube.readonly'
         ].join(' '),
         callback: async (tokenResponse) => {
           if (tokenResponse.error) {
@@ -113,9 +110,7 @@ export class GoogleAuthService {
                 client_id: clientId,
                 scope: [
                   'https://www.googleapis.com/auth/youtube.upload',
-                  'https://www.googleapis.com/auth/youtube.readonly',
-                  'https://www.googleapis.com/auth/drive.readonly',
-                  'https://www.googleapis.com/auth/userinfo.profile'
+                  'https://www.googleapis.com/auth/youtube.readonly'
                 ].join(' '),
                 ux_mode: 'popup',
                 callback: async (response) => {

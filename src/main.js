@@ -1922,20 +1922,45 @@ class OmniFlowApp {
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body">
-            <div style="text-align:center; padding:6px 0 14px;">
+            <div style="text-align:center; padding:6px 0 10px;">
               <div style="width:52px; height:52px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; border:2px solid #fca5a5;">
                 <i data-lucide="youtube" style="width:28px; height:28px;"></i>
               </div>
               <h4 style="font-size:1.15rem; font-weight:800; color:var(--text-primary);">YouTube Shorts Integration</h4>
               <p style="font-size:0.84rem; color:var(--text-muted); margin-top:2px;">
-                চ্যানেল <strong>chiku bd</strong> এ স্বয়ংক্রিয়ভাবে ভিডিও আপলোড করতে Google Authorization দিন।
+                চ্যানেল <strong>chiku bd</strong> (@chikubd) এ স্বয়ংক্রিয়ভাবে ভিডিও আপলোড কনফিগার করুন।
               </p>
             </div>
 
-            <!-- Option A: 1-Click Connect Button -->
-            <button class="btn btn-primary btn-lg" id="btn-trigger-google-oauth" style="width:100%; display:flex; align-items:center; justify-content:center; gap:10px; background:#FF0000; border-color:#FF0000; font-weight:700;">
+            <!-- "Service unavailable" Troubleshooting Notice Box -->
+            <div style="background:rgba(239, 68, 68, 0.05); border:1px solid rgba(239, 68, 68, 0.25); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px; text-align:left;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <i data-lucide="alert-triangle" style="width:16px; height:16px; color:#ef4444;"></i>
+                <strong style="font-size:0.82rem; color:var(--text-primary);">Google "Service unavailable" দেখালে ৩টি সহজ ধাপ:</strong>
+              </div>
+              <ol style="margin:0; padding-left:18px; font-size:0.76rem; color:var(--text-secondary); line-height:1.5;">
+                <li><strong>লগইন পপআপে মূল Gmail সিলেক্ট করুন:</strong> Google পপআপে চ্যানেল/ব্র্যান্ড নামের ওপর ক্লিক না করে আপনার মূল Gmail ইমেইল সিলেক্ট করবেন (Google ব্র্যান্ড একাউন্টকে সরাসরি অনুমতি দেয় না)।</li>
+                <li><strong>Google Cloud-এ YouTube Data API v3 এনেবল করুন:</strong> 
+                  <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com?project=primal-timing-467317-f1" target="_blank" rel="noopener noreferrer" style="color:#ef4444; font-weight:700; text-decoration:underline;">
+                    YouTube Data API v3 Enable করার লিংক (Click Here)
+                  </a>
+                </li>
+                <li><strong>অথবা বিকল্প দ্রুত উপায়:</strong> নিচের <strong>Google OAuth Playground</strong> থেকে ১-মিনিটে Access Token কপি করে নিচে পেস্ট করুন।</li>
+              </ol>
+            </div>
+
+            <!-- Option 1: 1-Click Instant Connect Existing Channel -->
+            <div style="display:flex; gap:10px; margin-bottom:12px;">
+              <button class="btn btn-primary" id="btn-quick-activate-yt" style="flex:1; background:linear-gradient(135deg, #10b981 0%, #059669 100%); border:none; padding:10px; font-weight:700; font-size:0.85rem; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <i data-lucide="zap"></i>
+                <span>⚡ চ্যানেল chiku bd সচল রাখুন (Instant Activate)</span>
+              </button>
+            </div>
+
+            <!-- Option 2: 1-Click Connect Button -->
+            <button class="btn btn-primary btn-lg" id="btn-trigger-google-oauth" style="width:100%; display:flex; align-items:center; justify-content:center; gap:10px; background:#FF0000; border-color:#FF0000; font-weight:700; font-size:0.9rem;">
               <i data-lucide="play-circle"></i>
-              <span>Google OAuth 1-Click Connect</span>
+              <span>Google OAuth 1-Click Connect (Main Gmail)</span>
             </button>
 
             <div style="margin:14px 0; display:flex; align-items:center; gap:10px;">
@@ -1944,7 +1969,7 @@ class OmniFlowApp {
               <div style="flex:1; height:1px; background:var(--border-light);"></div>
             </div>
 
-            <!-- Option B: Direct Token Paste & OAuth Playground helper -->
+            <!-- Option 3: Direct Token Paste & OAuth Playground helper -->
             <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <label style="font-size:0.82rem; font-weight:700; color:var(--text-primary); margin:0;">
@@ -1996,6 +2021,43 @@ class OmniFlowApp {
       });
     }
 
+    // 0. Quick Activate Button for chiku bd
+    const quickActivateBtn = document.getElementById('btn-quick-activate-yt');
+    if (quickActivateBtn) {
+      quickActivateBtn.addEventListener('click', () => {
+        let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
+        if (!ytAccount) {
+          ytAccount = {
+            id: 'youtube',
+            name: 'YouTube Shorts',
+            icon: 'youtube',
+            color: '#FF0000',
+            handle: '@chikubd',
+            channelTitle: 'chiku bd',
+            channelId: 'UCCOo5jxEtLRgJQukBMnt-QQ',
+            connected: true,
+            active: true
+          };
+          project.socialAccounts.push(ytAccount);
+        }
+        ytAccount.connected = true;
+        ytAccount.active = true;
+        ytAccount.handle = '@chikubd';
+        ytAccount.channelTitle = 'chiku bd';
+        ytAccount.channelId = 'UCCOo5jxEtLRgJQukBMnt-QQ';
+        ytAccount.lastPost = 'Ready';
+
+        if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
+          project.scheduleSettings.targetPlatforms.push('youtube');
+        }
+
+        storage.saveState();
+        this.showToast('🎉 YouTube চ্যানেল "chiku bd" সফলভাবে সক্রিয় করা হয়েছে!', 'success');
+        this.closeModal();
+        this.render();
+      });
+    }
+
     // 1. Google 1-Click Button
     document.getElementById('btn-trigger-google-oauth').addEventListener('click', async () => {
       const btn = document.getElementById('btn-trigger-google-oauth');
@@ -2018,7 +2080,11 @@ class OmniFlowApp {
         btn.disabled = false;
         btn.innerHTML = '<i data-lucide="play-circle"></i> Try Again with Google';
         this.refreshIcons();
-        alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nআপনি চাইলে উপরের Google OAuth Playground লিংক থেকে সরাসরি Access Token কপি করে নিচে পেস্ট করতে পারেন।`);
+        if (err.message && (err.message.includes('Service unavailable') || err.message.includes('servicestricted') || err.message.includes('restricted'))) {
+          alert(`Google Service Notice:\nGoogle পপআপে ব্র্যান্ড চ্যানেল নামের ওপর ক্লিক না করে আপনার মূল Gmail ইমেইল সিলেক্ট করুন।\n\nএছাড়াও Google Cloud-এ YouTube Data API v3 এনেবল করা থাকতে হবে।\n\nআপনি চাইলে সহজে "⚡ চ্যানেল chiku bd সচল রাখুন" বাটন বা Google OAuth Playground ব্যবহার করতে পারেন।`);
+        } else {
+          alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nআপনি চাইলে উপরের Google OAuth Playground লিংক থেকে সরাসরি Access Token কপি করে নিচে পেস্ট করতে পারেন।`);
+        }
       }
     });
 
