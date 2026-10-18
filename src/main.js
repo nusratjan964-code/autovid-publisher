@@ -532,6 +532,9 @@ class OmniFlowApp {
   // --- 2. DRIVE & UPLOAD VIEW ---
   renderDriveView(project) {
     const drive = project.driveConfig || {};
+    const ytAccount = project.socialAccounts?.find(a => a.id === 'youtube');
+    const hasGoogleAuth = !!(ytAccount?.connected && (ytAccount?.accessToken || GoogleAuthService.getYouTubeToken(project)));
+
     return `
       <div class="page-header">
         <div>
@@ -544,31 +547,57 @@ class OmniFlowApp {
       <div class="card">
         <div class="card-header">
           <div>
-            <h3 class="card-title"><i data-lucide="cloud"></i> Add Google Drive Folder Link</h3>
-            <p class="card-description">Paste your shared Google Drive link. All video files inside the folder will be scanned and loaded.</p>
+            <h3 class="card-title"><i data-lucide="cloud"></i> Google Drive Cloud Sync</h3>
+            <p class="card-description">গুগল ড্রাইভ ফোল্ডার বা সরাসরি ভিডিও ফাইলের লিংক দিয়ে এক ক্লিকে সব ভিডিও লোড করুন।</p>
           </div>
         </div>
 
         <div id="drive-alert-container"></div>
+
+        <!-- Google Authorization Banner -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; background:var(--bg-subtle); padding:10px 14px; border-radius:var(--radius-md); border:1px solid var(--border-light); flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="width:26px; height:26px; border-radius:50%; background:#4285F4; color:white; display:flex; align-items:center; justify-content:center;">
+              <i data-lucide="cloud" style="width:14px; height:14px;"></i>
+            </span>
+            <div>
+              <div style="font-size:0.86rem; font-weight:700; color:var(--text-primary);">
+                ${hasGoogleAuth ? 'Google Account Connected' : 'Google Account: Not Authorized'}
+              </div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">
+                ${hasGoogleAuth ? `Drive & YouTube Integration Active (${ytAccount?.channelTitle || 'chiku bd'})` : 'প্রাইভেট বা সুরক্ষিত ফোল্ডার স্ক্যান করতে Google কানেক্ট করুন'}
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btn-auth-drive-google" style="font-size:0.78rem; gap:6px; border-color:#4285F4; color:#4285F4;">
+            <i data-lucide="key"></i>
+            <span>${hasGoogleAuth ? 'Re-Authorize Google' : '1-Click Connect Google Account'}</span>
+          </button>
+        </div>
 
         <div style="display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
           <input 
             type="url" 
             class="form-input" 
             id="input-drive-url" 
-            placeholder="https://drive.google.com/drive/folders/YOUR_FOLDER_ID" 
+            placeholder="https://drive.google.com/drive/folders/YOUR_FOLDER_ID অথবা সরাসরি ভিডিও লিংক" 
             value="${drive.folderUrl || ''}"
             style="flex:1; min-width:300px;"
           />
-          <button class="btn btn-primary" id="btn-sync-drive-action">
+          <button class="btn btn-primary" id="btn-sync-drive-action" style="padding:10px 20px; font-weight:600;">
             <i data-lucide="refresh-cw"></i>
             <span>Sync Drive Link</span>
           </button>
         </div>
 
-        <p style="font-size:0.8rem; color:var(--text-muted);">
-          Note: Ensure the folder permission is set to <strong>"Anyone with the link can view"</strong> so video files can be indexed. If the folder has no videos, the system will alert you immediately.
-        </p>
+        <div style="background:rgba(59, 130, 246, 0.05); border:1px solid rgba(59, 130, 246, 0.2); border-radius:var(--radius-md); padding:10px 14px; font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">
+          <strong>💡 গুগল ড্রাইভ থেকে ভিডিও লোড করার নির্দেশিকা:</strong>
+          <ul style="margin:4px 0 0; padding-left:18px;">
+            <li>ফোল্ডারের পারমিশন <strong>"Anyone with the link can view"</strong> (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) রাখলে পাসওয়ার্ড বা কী ছাড়াই নিমেষেই ভিডিও স্ক্যান হবে।</li>
+            <li>যদি ফোল্ডারটি প্রাইভেট থাকে, তবে উপরের <strong>"1-Click Connect Google Account"</strong> বাটন দিয়ে পারমিশন দিন।</li>
+            <li>ফোল্ডার লিংক ছাড়াও আপনি যেকোনো ভিডিও ফাইলের লিংক (<code>/file/d/...</code>) সরাসরি পেস্ট করতে পারেন।</li>
+          </ul>
+        </div>
       </div>
 
       <!-- Local Folder & Video Upload Dropzone -->
@@ -2191,6 +2220,24 @@ class OmniFlowApp {
       syncDriveBtn.addEventListener('click', () => this.syncDriveFromCurrentInput());
     }
 
+    const authDriveBtn = document.getElementById('btn-auth-drive-google');
+    if (authDriveBtn) {
+      authDriveBtn.addEventListener('click', async () => {
+        try {
+          authDriveBtn.disabled = true;
+          authDriveBtn.innerText = 'Connecting Google Drive...';
+          const project = storage.getActiveProject();
+          await GoogleAuthService.connectYouTubeChannel(project);
+          this.showToast('Google Account Connected for Drive & YouTube!', 'success');
+          this.render();
+        } catch (err) {
+          alert(`Google Authorization: ${err.message}`);
+        } finally {
+          authDriveBtn.disabled = false;
+        }
+      });
+    }
+
     // Local Upload Handlers
     const browseFilesBtn = document.getElementById('btn-browse-files');
     const inputFiles = document.getElementById('file-input-files');
@@ -2386,7 +2433,11 @@ class OmniFlowApp {
       createIcons({ icons });
     }
 
-    const scanResult = await DriveSyncService.scanDriveFolder(url);
+    const project = storage.getActiveProject();
+    const apiKey = project?.aiSettings?.apiKey || localStorage.getItem('omni_google_api_key') || '';
+    const token = GoogleAuthService.getYouTubeToken(project) || localStorage.getItem('omni_google_access_token') || '';
+
+    const scanResult = await DriveSyncService.scanDriveFolder(url, { apiKey, token, project });
 
     if (syncBtn) {
       syncBtn.disabled = false;
@@ -2397,26 +2448,54 @@ class OmniFlowApp {
     // Honest error / empty feedback (as requested!)
     if (!scanResult.success) {
       if (alertContainer) {
+        const solutionsHtml = scanResult.solutions && scanResult.solutions.length ? `
+          <div style="background: rgba(239, 68, 68, 0.08); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px 14px; margin-top: 10px;">
+            <div style="font-size: 13px; font-weight: 700; color: #ef4444; margin-bottom: 6px;">💡 সহজ সমাধানসমূহ (How to fix):</div>
+            <ol style="margin: 0; padding-left: 20px; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary);">
+              ${scanResult.solutions.map(s => `<li>${s}</li>`).join('')}
+            </ol>
+          </div>
+        ` : '';
+
         alertContainer.innerHTML = `
-          <div class="alert-box alert-danger">
-            <i data-lucide="alert-circle" style="width:24px; height:24px; flex-shrink:0;"></i>
-            <div class="alert-content">
-              <h4>No Videos Found in Google Drive</h4>
-              <p>${scanResult.message}</p>
+          <div class="alert-box alert-danger" style="display: block;">
+            <div style="display: flex; gap: 10px; align-items: flex-start;">
+              <i data-lucide="alert-circle" style="width:24px; height:24px; flex-shrink:0; color:#ef4444; margin-top: 2px;"></i>
+              <div class="alert-content">
+                <h4 style="margin:0 0 4px; font-weight:700;">Google Drive Video Scan Alert</h4>
+                <p style="white-space: pre-line; line-height: 1.5; margin: 0;">${scanResult.message}</p>
+              </div>
             </div>
+            ${solutionsHtml}
           </div>
         `;
         createIcons({ icons });
       }
-      this.showToast(scanResult.message, 'error');
+      this.showToast(scanResult.error === 'ACCESS_RESTRICTED' ? 'Google Drive Access Restricted' : (scanResult.message || 'Drive Scan Error'), 'error');
       return;
     }
 
-    const project = storage.getActiveProject();
-    scanResult.videos.forEach(v => storage.addVideoToActiveProject(v));
-    storage.saveState();
+    if (project) {
+      scanResult.videos.forEach(v => storage.addVideoToActiveProject(v));
+      storage.saveState();
+    }
+    
+    if (alertContainer) {
+      alertContainer.innerHTML = `
+        <div class="alert-box alert-success" style="display: flex; gap: 10px; align-items: center;">
+          <i data-lucide="check-circle" style="width:24px; height:24px; color:#10b981; flex-shrink:0;"></i>
+          <div class="alert-content">
+            <h4 style="margin: 0; font-weight: 700; color: #10b981;">সফলভাবে ভিডিও লোড হয়েছে! (${scanResult.count}টি ভিডিও)</h4>
+            <p style="margin: 3px 0 0; font-size: 13px;">Google Drive থেকে ভিডিওগুলো Video Pipeline-এ যুক্ত হয়েছে।</p>
+          </div>
+        </div>
+      `;
+      createIcons({ icons });
+    }
     this.showToast(`Imported ${scanResult.count} videos from Drive!`, 'success');
-    this.render();
+    setTimeout(() => {
+      this.render();
+    }, 700);
   }
 
   // --- LOCAL FOLDER / MULTI-FILE IMPORT ---

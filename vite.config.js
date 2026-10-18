@@ -34,6 +34,8 @@ function apiDevServerPlugin() {
             handlerModule = await import('./api/facebook/status.js');
           } else if (pathname === '/api/facebook/publish') {
             handlerModule = await import('./api/facebook/publish.js');
+          } else if (pathname === '/api/drive/scan') {
+            handlerModule = await import('./api/drive/scan.js');
           } else if (pathname === '/api/queue') {
             handlerModule = await import('./api/queue.js');
           } else if (pathname === '/api/cron') {

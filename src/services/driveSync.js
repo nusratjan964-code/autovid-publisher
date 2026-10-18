@@ -3,31 +3,44 @@ import { saveVideoBlob } from './videoStore.js';
 
 export class DriveSyncService {
   /**
-   * Validates if a URL is a legitimate Google Drive folder link
+   * Validates if a URL is a legitimate Google Drive folder or file link
    */
   static validateDriveUrl(url) {
     if (!url || typeof url !== 'string') return { valid: false, error: 'Please enter a Google Drive URL.' };
     const trimmed = url.trim();
 
+    // Check if it's a direct file link
+    const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || 
+                      trimmed.match(/open\?id=([a-zA-Z0-9_-]+)/) ||
+                      trimmed.match(/uc\?id=([a-zA-Z0-9_-]+)/);
+    if (fileMatch) {
+      return { valid: true, type: 'file', id: fileMatch[1], fileId: fileMatch[1], folderId: fileMatch[1], url: trimmed };
+    }
+
+    // Check if it's a folder link
     const isDriveDomain = trimmed.includes('drive.google.com');
     const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/) || trimmed.match(/id=([a-zA-Z0-9_-]+)/);
 
-    if (!isDriveDomain || !folderMatch) {
-      return {
-        valid: false,
-        error: 'Please enter a valid Google Drive folder link (e.g. https://drive.google.com/drive/folders/YOUR_FOLDER_ID)'
-      };
+    if (folderMatch) {
+      return { valid: true, type: 'folder', id: folderMatch[1], folderId: folderMatch[1], url: trimmed };
     }
 
-    return { valid: true, folderId: folderMatch[1], url: trimmed };
+    // Direct ID check
+    if (/^[a-zA-Z0-9_-]{25,50}$/.test(trimmed)) {
+      return { valid: true, type: 'unknown', id: trimmed, folderId: trimmed, url: trimmed };
+    }
+
+    return {
+      valid: false,
+      error: 'অনুগ্রহ করে সঠিক Google Drive লিংক দিন (যেমন: https://drive.google.com/drive/folders/... অথবা https://drive.google.com/file/d/...)'
+    };
   }
 
   /**
-   * Scans a Google Drive folder.
-   * If Google Drive API key is provided, attempts real fetch.
-   * Otherwise validates access and requires public access / video content.
+   * Scans a Google Drive folder or imports single video file.
+   * Utilizes server endpoint /api/drive/scan, Google OAuth token, and API key.
    */
-  static async scanDriveFolder(folderUrl, googleApiKey = '') {
+  static async scanDriveFolder(folderUrl, options = {}) {
     const validation = this.validateDriveUrl(folderUrl);
     if (!validation.valid) {
       return {
@@ -37,80 +50,148 @@ export class DriveSyncService {
       };
     }
 
-    const folderId = validation.folderId;
+    // Extract options
+    let apiKey = '';
+    let token = '';
 
-    // If a Google API key is provided, query real Google Drive v3 REST API
-    if (googleApiKey && googleApiKey.trim().length > 10) {
-      try {
-        const query = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov') and trashed = false`);
-        const apiUrl = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)&key=${googleApiKey.trim()}`;
-        
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error?.message || `HTTP ${response.status}`);
-        }
+    if (typeof options === 'string') {
+      apiKey = options;
+    } else if (options && typeof options === 'object') {
+      apiKey = options.apiKey || options.googleApiKey || '';
+      token = options.token || options.accessToken || '';
+    }
 
-        const data = await response.json();
-        const files = data.files || [];
+    // Attempt 1: Server-side scan endpoint
+    try {
+      const scanRes = await fetch('/api/drive/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: folderUrl,
+          apiKey,
+          token
+        })
+      });
 
-        if (files.length === 0) {
-          return {
-            success: false,
-            error: 'NO_VIDEOS_FOUND',
-            message: '⚠️ No video files (.mp4, .mov, .webm) were found in this Google Drive folder. Please verify the folder contains videos and permissions are set to "Anyone with the link".'
-          };
-        }
+      const scanData = await scanRes.json();
 
-        const mappedVideos = files.map(file => {
-          const durationMillis = file.videoMediaMetadata?.durationMillis;
-          let durationFormatted = '0:45';
-          if (durationMillis) {
-            const totalSec = Math.floor(durationMillis / 1000);
-            const m = Math.floor(totalSec / 60);
-            const s = totalSec % 60;
-            durationFormatted = `${m}:${s < 10 ? '0' : ''}${s}`;
-          }
-
-          const sizeMb = file.size ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'Cloud Video';
-
-          return {
-            id: `vid_gdrive_${file.id}`,
-            title: file.name,
-            duration: durationFormatted,
-            size: sizeMb,
-            videoUrl: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`,
-            thumbnailUrl: file.thumbnailLink || '',
-            status: 'ready',
-            source: 'Google Drive',
-            driveFileId: file.id
-          };
-        });
-
+      if (scanRes.ok && scanData.success && scanData.videos && scanData.videos.length > 0) {
         return {
           success: true,
-          folderName: `Drive Folder (${folderId.substring(0, 8)}...)`,
+          folderName: scanData.type === 'file' ? 'Google Drive Video' : `Drive Folder (${validation.id.substring(0, 8)}...)`,
           folderUrl,
-          videos: mappedVideos,
-          count: mappedVideos.length
+          videos: scanData.videos,
+          count: scanData.videos.length,
+          message: scanData.message
         };
-      } catch (err) {
+      }
+
+      if (scanData.error === 'ACCESS_RESTRICTED') {
+        const solutionsText = scanData.solutions ? scanData.solutions.join('\n') : '';
         return {
           success: false,
-          error: 'API_ERROR',
-          message: `Unable to access Google Drive via API: ${err.message}. Please ensure the folder is shared as 'Anyone with the link' or upload your video files directly.`
+          error: 'ACCESS_RESTRICTED',
+          message: `${scanData.message}\n\n${solutionsText}`,
+          solutions: scanData.solutions
         };
+      }
+
+      if (scanData.message) {
+        return {
+          success: false,
+          error: scanData.error || 'SCAN_ERROR',
+          message: scanData.message
+        };
+      }
+    } catch (serverErr) {
+      console.warn('[DriveSync] Server scan failed, trying direct browser flow:', serverErr.message);
+    }
+
+    // Attempt 2: If single file, generate direct streaming object
+    if (validation.type === 'file') {
+      const fileId = validation.id;
+      const directVideo = {
+        id: `vid_gdrive_${fileId}`,
+        title: 'Google Drive Video',
+        duration: '0:30',
+        size: 'Cloud Video',
+        videoUrl: `https://drive.google.com/uc?id=${fileId}&export=download`,
+        thumbnailUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
+        status: 'ready',
+        source: 'Google Drive',
+        driveFileId: fileId
+      };
+
+      return {
+        success: true,
+        folderName: 'Google Drive File',
+        folderUrl,
+        videos: [directVideo],
+        count: 1,
+        message: '১টি Google Drive ভিডিও ফাইল সফলভাবে লোড হয়েছে!'
+      };
+    }
+
+    // Attempt 3: Direct browser client using Google Drive API v3
+    if (apiKey || token) {
+      try {
+        const folderId = validation.id;
+        const q = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.webm') and trashed = false`);
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const keyParam = apiKey ? `&key=${apiKey.trim()}` : '';
+        const apiUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}`;
+
+        const response = await fetch(apiUrl, { headers });
+        if (response.ok) {
+          const data = await response.json();
+          const files = data.files || [];
+
+          if (files.length === 0) {
+            return {
+              success: false,
+              error: 'NO_VIDEOS_FOUND',
+              message: 'এই ফোল্ডারে কোনো ভিডিও ফাইল (.mp4, .mov, .webm) পাওয়া যায়নি।'
+            };
+          }
+
+          const mappedVideos = files.map(file => {
+            const durationMillis = file.videoMediaMetadata?.durationMillis;
+            let durationFormatted = '0:30';
+            if (durationMillis) {
+              const totalSec = Math.floor(durationMillis / 1000);
+              durationFormatted = `${Math.floor(totalSec / 60)}:${(totalSec % 60).toString().padStart(2, '0')}`;
+            }
+
+            return {
+              id: `vid_gdrive_${file.id}`,
+              title: file.name,
+              duration: durationFormatted,
+              size: file.size ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'Cloud Video',
+              videoUrl: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`,
+              thumbnailUrl: file.thumbnailLink || `https://drive.google.com/thumbnail?id=${file.id}&sz=w600`,
+              status: 'ready',
+              source: 'Google Drive',
+              driveFileId: file.id
+            };
+          });
+
+          return {
+            success: true,
+            folderName: `Drive Folder (${folderId.substring(0, 8)}...)`,
+            folderUrl,
+            videos: mappedVideos,
+            count: mappedVideos.length
+          };
+        }
+      } catch (err) {
+        console.warn('[DriveSync] Client API call error:', err.message);
       }
     }
 
-    // If no Google API key is supplied, attempt an HTTP check or notify user to upload directly or provide key
-    await new Promise(r => setTimeout(r, 800));
-
-    // Without API key, Google Drive does not expose folder file lists due to CORS/API authentication
     return {
       success: false,
-      error: 'NO_VIDEOS_FOUND',
-      message: '⚠️ No video files could be retrieved from this Drive folder link without a Google Cloud Drive API Key, or the folder is empty / private. Please upload your video files or folder directly below, or supply a Google API Key in Settings.'
+      error: 'ACCESS_RESTRICTED',
+      message: 'Google Drive ফোল্ডারটি প্রাইভেট বা সুরক্ষিত রয়েছে।\n\nভিডিও লোড করার সহজ সমাধান:\n১. গুগল ড্রাইভে ফোল্ডারে রাইট-ক্লিক করে Share > General access-এ "Anyone with the link can view" (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) সিলেক্ট করুন।\n২. অথবা "1-Click Connect Google Drive" বাটনে ক্লিক করে একাউন্ট পারমিশন দিন।\n৩. অথবা সরাসরি আপনার কম্পিউটার থেকে নিচে ভিডিও ফাইল সিলেক্ট করুন।'
     };
   }
 
