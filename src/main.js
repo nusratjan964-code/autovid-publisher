@@ -703,14 +703,62 @@ class OmniFlowApp {
 
       <!-- Loaded Videos Section -->
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
           <div>
             <h3 class="card-title"><i data-lucide="list-video"></i> Loaded Videos (${project.videos.length})</h3>
             <p class="card-description">Active video library for project: <strong>${project.name}</strong></p>
           </div>
+          ${project.videos.length > 0 ? `
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn btn-primary" id="btn-auto-schedule-viral-loaded" style="background:linear-gradient(135deg, #4f46e5 0%, #ec4899 100%); border:none; padding:10px 20px; font-weight:700; font-size:0.88rem; box-shadow:0 4px 14px rgba(236, 72, 153, 0.35); gap:8px;">
+                <i data-lucide="sparkles"></i>
+                <span>সব ${project.videos.length}টি ভিডিও ৩টি ভাইরাল টাইমে শিডিউল করুন</span>
+              </button>
+            </div>
+          ` : ''}
         </div>
 
         ${project.videos.length > 0 ? `
+          <!-- 3 Daily Viral Night Slots Showcase Banner -->
+          <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(236, 72, 153, 0.08) 100%); border: 1.5px solid rgba(99, 102, 241, 0.28); border-radius: var(--radius-md); padding: 16px 20px; margin-bottom: 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+              <div style="flex:1; min-width:280px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                  <span style="background:linear-gradient(135deg, #f59e0b, #ef4444); color:white; font-size:0.72rem; font-weight:800; padding:3px 9px; border-radius:12px; letter-spacing:0.5px; text-transform:uppercase;">
+                    🔥 VIRAL NIGHT TRIFECTA
+                  </span>
+                  <span style="font-weight:700; font-size:0.95rem; color:var(--text-primary);">
+                    প্রতিদিন ৩টি সেরা ভাইরাল সময়ে অটো-পোস্ট (Daily 3 Videos Auto-Publish)
+                  </span>
+                </div>
+                <p style="font-size:0.8rem; color:var(--text-secondary); margin:0 0 8px; line-height:1.45;">
+                  সোশ্যাল মিডিয়া অ্যালগরিদম অনুযায়ী সন্ধ্যা ও রাতের এই ৩টি সময়ে শর্টস ও রিলস দিলে সর্বোচ্চ অর্গানিক ভিউজ ও শেয়ার হয়:
+                </p>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:0.8rem;">
+                  <span style="background:var(--bg-card); padding:5px 12px; border-radius:6px; border:1px solid var(--border-light); font-weight:600;">
+                    🌆 <strong>Slot 1 (7:00 PM):</strong> সন্ধ্যা পিক টাইম (Evening Prime)
+                  </span>
+                  <span style="background:var(--bg-card); padding:5px 12px; border-radius:6px; border:1px solid var(--border-light); font-weight:600;">
+                    🚀 <strong>Slot 2 (9:00 PM):</strong> প্রাইম ভাইরাল পিক (Viral Peak)
+                  </span>
+                  <span style="background:var(--bg-card); padding:5px 12px; border-radius:6px; border:1px solid var(--border-light); font-weight:600;">
+                    🌙 <strong>Slot 3 (11:00 PM):</strong> লেট নাইট ওয়াচ (Late Night Chill)
+                  </span>
+                </div>
+                <div style="font-size:0.76rem; color:#10b981; font-weight:600; margin-top:8px; display:flex; align-items:center; gap:6px;">
+                  <i data-lucide="check-circle" style="width:14px; height:14px;"></i>
+                  <span>প্রতিটি ভিডিওতে স্বয়ংক্রিয়ভাবে আকর্ষণীয় AI ক্যাপশন ও ট্রেন্ডিং হ্যাশট্যাগ (#shorts #reels #viral #animation #bangla) যুক্ত থাকবে।</span>
+                </div>
+              </div>
+              <div>
+                <button class="btn btn-primary" id="btn-auto-schedule-viral-loaded-2" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); border:none; padding:12px 20px; font-weight:700; font-size:0.86rem; box-shadow:0 4px 12px rgba(16, 185, 129, 0.3); white-space:nowrap; gap:6px;">
+                  <i data-lucide="calendar-check"></i>
+                  <span>1-Click Auto-Schedule 3 Daily</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="videos-grid">
             ${project.videos.map(v => this.renderVideoCard(v)).join('')}
           </div>
@@ -743,9 +791,9 @@ class OmniFlowApp {
             <span>Add More Videos</span>
           </button>
           ${project.videos.length > 0 ? `
-            <button class="btn btn-primary" id="btn-schedule-pipeline-view">
-              <i data-lucide="calendar"></i>
-              <span>Auto-Schedule All</span>
+            <button class="btn btn-primary" id="btn-schedule-pipeline-view" style="background:linear-gradient(135deg, #4f46e5 0%, #ec4899 100%); border:none;">
+              <i data-lucide="sparkles"></i>
+              <span>Auto-Schedule 3 Daily (Viral Slots)</span>
             </button>
           ` : ''}
         </div>
@@ -782,6 +830,21 @@ class OmniFlowApp {
     else if (s === 'failed') badgeClass = 'badge-danger';
     else if (s === 'ready') badgeClass = 'badge-primary';
 
+    let scheduleChip = '';
+    if (video.scheduledDate) {
+      try {
+        const d = new Date(video.scheduledDate);
+        const dayStr = d.toLocaleDateString('bn-BD', { month: 'short', day: 'numeric', weekday: 'short' });
+        const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        scheduleChip = `
+          <div style="background:rgba(99, 102, 241, 0.08); border:1px solid rgba(99, 102, 241, 0.22); border-radius:6px; padding:5px 8px; font-size:0.73rem; color:#4f46e5; font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            <i data-lucide="calendar" style="width:13px; height:13px;"></i>
+            <span>📅 ${dayStr} • ⏰ ${timeStr} ${video.slotLabel ? `(${video.slotLabel})` : ''}</span>
+          </div>
+        `;
+      } catch (e) {}
+    }
+
     return `
       <div class="video-card" data-video-id="${video.id}">
         <div class="video-thumbnail-container btn-open-video-player" data-video-id="${video.id}">
@@ -810,9 +873,11 @@ class OmniFlowApp {
             </div>
           ` : ''}
 
+          ${scheduleChip}
+
           <div class="caption-preview-box ${!video.caption ? 'empty' : ''}">
             ${video.caption 
-              ? `<strong>AI Caption:</strong> ${video.caption.substring(0, 110)}...`
+              ? `<strong>AI Caption & Tags:</strong> ${video.caption.substring(0, 110)}...`
               : '⚡ No AI caption generated yet. Click "AI Caption" below.'
             }
           </div>
@@ -1087,55 +1152,99 @@ class OmniFlowApp {
   // --- 6. DAILY TIMING SCHEDULE VIEW ---
   renderScheduleView(project) {
     const sched = project.scheduleSettings || {};
-    const scheduledVideos = project.videos.filter(v => v.status === 'scheduled');
+    const scheduledVideos = project.videos.filter(v => {
+      const s = (v.status || '').toLowerCase();
+      return s === 'scheduled' || s === 'pending';
+    });
     const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const times = Array.isArray(sched.times) && sched.times.length >= 3 ? sched.times : ['19:00', '21:00', '23:00'];
+    const freq = sched.frequency || 3;
 
     return `
       <div class="page-header">
         <div>
           <h1 class="page-title">Daily Timing Schedule & Queue</h1>
-          <p class="page-subtitle">Configure your daily posting time. The automated scheduler will release one video each day with AI captions.</p>
+          <p class="page-subtitle">প্রতিদিন ৩টি সেরা ভাইরাল সময়ে ফেসবুক ও ইউটিউবে ভিডিও অটো-পাবলিশ করার টাইম জোন কনফিগারেশন।</p>
         </div>
         <div style="display:flex; gap:10px;">
           ${project.videos.length > 0 ? `
-            <button class="btn btn-primary" id="btn-run-auto-scheduler">
+            <button class="btn btn-primary" id="btn-run-auto-scheduler" style="background:linear-gradient(135deg, #4f46e5 0%, #ec4899 100%); border:none; padding:10px 20px; font-weight:700; box-shadow:0 4px 14px rgba(236, 72, 153, 0.35);">
               <i data-lucide="sparkles"></i>
-              <span>Auto-Schedule Unscheduled Videos</span>
+              <span>সব ${project.videos.length}টি ভিডিও ৩টি ভাইরাল টাইমে শিডিউল করুন</span>
             </button>
           ` : ''}
         </div>
       </div>
 
+      <!-- Viral Night Schedule Settings Card -->
       <div class="card">
         <div class="card-header">
           <div>
-            <h3 class="card-title"><i data-lucide="clock"></i> Daily Posting Frequency & Time</h3>
-            <p class="card-description">Set the exact time when your videos should be published to connected channels.</p>
+            <h3 class="card-title"><i data-lucide="clock"></i> Daily Posting Frequency & Viral Night Time Slots</h3>
+            <p class="card-description">সোশ্যাল মিডিয়ার পিক আওয়ার অনুযায়ী সন্ধ্যা ও রাতের ৩টি সেরা টাইম জোন সেট করুন।</p>
           </div>
           <button class="btn btn-outline btn-sm" id="btn-save-schedule-settings">Save Schedule</button>
         </div>
 
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:20px;">
           <div class="form-group">
-            <label class="form-label">Daily Post Time</label>
-            <input type="time" class="form-input" id="sched-time-input" value="${sched.preferredTime || '18:00'}" />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Posting Cadence</label>
+            <label class="form-label">Posting Cadence (দৈনিক কতটি ভিডিও?)</label>
             <select class="form-select" id="sched-cadence-select">
-              <option value="1" ${sched.frequency === 1 ? 'selected' : ''}>1 Video Every Day (Recommended)</option>
-              <option value="2" ${sched.frequency === 2 ? 'selected' : ''}>2 Videos Every Day</option>
+              <option value="3" ${freq === 3 ? 'selected' : ''}>🔥 3 Videos Every Day (Viral Night Trifecta: 7PM, 9PM, 11PM) — Recommended</option>
+              <option value="1" ${freq === 1 ? 'selected' : ''}>1 Video Every Day</option>
+              <option value="2" ${freq === 2 ? 'selected' : ''}>2 Videos Every Day</option>
+              <option value="4" ${freq === 4 ? 'selected' : ''}>4 Videos Every Day</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Timezone</label>
+            <label class="form-label">Timezone (টাইম জোন)</label>
             <input type="text" class="form-input" id="sched-timezone-input" value="${sched.timezone || 'Asia/Dhaka'}" readonly style="background:var(--bg-subtle);" />
           </div>
         </div>
 
-        <div style="margin-top:14px;">
+        <!-- 3 Specific Night Time Slots -->
+        <div style="margin-top:16px;">
+          <label class="form-label" style="font-size:0.9rem; font-weight:700; margin-bottom:10px; display:block;">
+            🎯 ৩টি নির্ধারিত ভাইরাল টাইম স্লট (Evening & Night Viral Slots):
+          </label>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; padding:16px; background:var(--bg-subtle); border-radius:var(--radius-md); border:1px solid var(--border-light);">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>🌆 Slot 1 (Evening Prime)</span>
+                <span style="color:#4f46e5; font-weight:700; font-size:0.75rem;">7:00 PM</span>
+              </label>
+              <input type="time" class="form-input" id="sched-time-slot1" value="${times[0] || '19:00'}" />
+              <span style="font-size:0.72rem; color:var(--text-muted); margin-top:5px; display:block; line-height:1.4;">
+                সন্ধ্যা পিক টাইম — কাজ ও ক্লাস শেষে অবসর সময়ে ইউজারদের প্রথম স্ক্রোলিং ঢেউ।
+              </span>
+            </div>
+
+            <div class="form-group" style="margin:0;">
+              <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>🚀 Slot 2 (Viral Peak)</span>
+                <span style="color:#ec4899; font-weight:700; font-size:0.75rem;">9:00 PM</span>
+              </label>
+              <input type="time" class="form-input" id="sched-time-slot2" value="${times[1] || '21:00'}" />
+              <span style="font-size:0.72rem; color:var(--text-muted); margin-top:5px; display:block; line-height:1.4;">
+                দিনের সর্বোচ্চ ভাইরাল পিক — ফেসবুক রিলস ও ইউটিউব শর্টসে সর্বোচ্চ সক্রিয় ইউজার।
+              </span>
+            </div>
+
+            <div class="form-group" style="margin:0;">
+              <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>🌙 Slot 3 (Late Night Binge)</span>
+                <span style="color:#10b981; font-weight:700; font-size:0.75rem;">11:00 PM</span>
+              </label>
+              <input type="time" class="form-input" id="sched-time-slot3" value="${times[2] || '23:00'}" />
+              <span style="font-size:0.72rem; color:var(--text-muted); margin-top:5px; display:block; line-height:1.4;">
+                লেট নাইট ওয়াচ — ঘুমানোর আগের বিনোদন, সবচেয়ে বেশি ভিডিও রিটেনশন ও লাইক।
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
           <label class="form-label">Active Posting Days</label>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
             ${daysOfWeek.map(day => `
@@ -1150,11 +1259,17 @@ class OmniFlowApp {
 
       <!-- Scheduled Queue -->
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
           <div>
             <h3 class="card-title"><i data-lucide="calendar"></i> Upcoming Scheduled Dispatch Timeline</h3>
-            <p class="card-description">${scheduledVideos.length} video(s) sequentially scheduled.</p>
+            <p class="card-description">${scheduledVideos.length} video(s) sequentially scheduled across upcoming viral slots.</p>
           </div>
+          ${project.videos.length > 0 ? `
+            <button class="btn btn-primary btn-sm" id="btn-schedule-pipeline-view" style="gap:6px;">
+              <i data-lucide="sparkles"></i>
+              <span>Re-Schedule All ${project.videos.length} Videos</span>
+            </button>
+          ` : ''}
         </div>
 
         ${scheduledVideos.length > 0 ? `
@@ -1169,7 +1284,7 @@ class OmniFlowApp {
             <div class="empty-title">0 videos scheduled</div>
             <div class="empty-desc">
               ${project.videos.length > 0 
-                ? 'You have loaded videos ready! Click "Auto-Schedule Unscheduled Videos" above to assign upcoming daily dates.' 
+                ? 'আপনার ' + project.videos.length + 'টি ভিডিও রেডি আছে! ওপরের "সব ' + project.videos.length + 'টি ভিডিও ৩টি ভাইরাল টাইমে শিডিউল করুন" বাটনে ক্লিক করলেই প্রতিদিন ৩টি করে সাজিয়ে দেয়া হবে।' 
                 : 'Import videos from Google Drive or local files first to populate the schedule.'
               }
             </div>
@@ -2178,20 +2293,47 @@ class OmniFlowApp {
       headerSimulate.addEventListener('click', () => this.runPublishAction(true));
     }
 
-    const dashAutoSched = document.getElementById('btn-dash-auto-schedule') || document.getElementById('btn-run-auto-scheduler') || document.getElementById('btn-schedule-pipeline-view');
-    if (dashAutoSched) {
-      dashAutoSched.addEventListener('click', async () => {
-        const project = storage.getActiveProject();
-        if (project.videos.length === 0) {
-          this.showToast('Please add videos before scheduling.', 'warning');
-          return;
-        }
-        const res = await SchedulerService.autoScheduleVideos(project);
+    const triggerViralScheduler = async (forceAll = true) => {
+      const project = storage.getActiveProject();
+      if (!project || !project.videos || project.videos.length === 0) {
+        this.showToast('শিডিউল করার জন্য প্রথমে গুগল ড্রাইভ থেকে ভিডিও লোড করুন।', 'warning');
+        return;
+      }
+
+      this.showToast(`সব ${project.videos.length}টি ভিডিওতে AI ক্যাপশন ও হ্যাশট্যাগ যুক্ত করে ৩টি ভাইরাল স্লটে শিডিউল করা হচ্ছে...`, 'info', 4000);
+
+      try {
+        const res = await SchedulerService.autoScheduleVideos(project, (msg) => {
+          console.log('[Scheduler Progress]', msg);
+        }, { forceAll: true });
+
         storage.saveState();
-        this.showToast(res.message, 'success');
+
+        try {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        } catch (e) {}
+
+        this.showToast(res.message, 'success', 7000);
         this.render();
-      });
-    }
+      } catch (err) {
+        console.error('[Scheduler Error]', err);
+        this.showToast('শিডিউল করার সময় ত্রুটি: ' + err.message, 'danger');
+      }
+    };
+
+    ['btn-dash-auto-schedule', 'btn-run-auto-scheduler', 'btn-schedule-pipeline-view', 'btn-auto-schedule-viral-loaded', 'btn-auto-schedule-viral-loaded-2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          triggerViralScheduler(true);
+        });
+      }
+    });
 
     // Video card actions
     document.querySelectorAll('.btn-publish-single-video').forEach(btn => {
@@ -2513,11 +2655,19 @@ class OmniFlowApp {
       saveScheduleBtn.addEventListener('click', () => {
         const project = storage.getActiveProject();
         const days = Array.from(document.querySelectorAll('.posting-day-checkbox:checked')).map(cb => cb.value);
-        project.scheduleSettings.preferredTime = document.getElementById('sched-time-input').value;
-        project.scheduleSettings.frequency = parseInt(document.getElementById('sched-cadence-select').value, 10);
+        const cadenceEl = document.getElementById('sched-cadence-select');
+        const freq = cadenceEl ? parseInt(cadenceEl.value, 10) : 3;
+
+        const slot1 = document.getElementById('sched-time-slot1')?.value || '19:00';
+        const slot2 = document.getElementById('sched-time-slot2')?.value || '21:00';
+        const slot3 = document.getElementById('sched-time-slot3')?.value || '23:00';
+
+        project.scheduleSettings.frequency = freq;
+        project.scheduleSettings.preferredTime = slot1;
+        project.scheduleSettings.times = [slot1, slot2, slot3];
         project.scheduleSettings.postingDays = days;
         storage.saveState();
-        this.showToast('Schedule settings saved!', 'success');
+        this.showToast('শিডিউল সেটিংস সেভ হয়েছে (প্রতিদিন ৩টি ভাইরাল টাইম: ৭:০০ PM, ৯:০০ PM, ১১:০০ PM)!', 'success');
       });
     }
   }

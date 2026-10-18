@@ -104,40 +104,76 @@ Respond only in JSON: {"hook": "...", "caption": "...", "hashtags": ["#tag1"]}`;
     };
   }
 
-  static synthesizeSmartCaption(title, niche, tone, hashtagCount, callToAction) {
-    const cleanTitle = title.replace(/\.(mp4|mov|webm|avi|mkv)$/i, '').replace(/[_-]/g, ' ');
-    
-    // Curated dynamic hooks
-    const hooks = [
-      `🚨 You won't believe what happens when you try this: ${cleanTitle}`,
-      `💡 The secret nobody tells you about ${cleanTitle} in 2026!`,
-      `⚡ Stop scrolling if you want to master ${cleanTitle} right now!`,
-      `🔥 Here is the game-changer: ${cleanTitle}`,
-      `🧠 99% of people get this completely wrong: ${cleanTitle}`
-    ];
-    const hook = hooks[Math.floor(Math.random() * hooks.length)];
+  static synthesizeSmartCaption(title, niche, tone, hashtagCount = 6, callToAction = '') {
+    // Clean up filename prefixes, underscores, and extensions
+    let cleanTitle = (title || 'Video')
+      .replace(/\.(mp4|mov|webm|avi|mkv)$/i, '')
+      .replace(/^(masstiktok_fitappletoons___|masstiktok_|fitappletoons___|tiktok_|yt_|reels_|shorts_)/i, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-    const bodies = [
-      `We break down the exact formula step by step so you don't waste hours guessing. Everything from setup to real results is covered right here.`,
-      `This one simple tweak changed everything. Make sure to bookmark this reel before the algorithm hides it!`,
-      `Here is why this matters: the landscape is moving faster than ever, and those who adapt right now will win big.`
-    ];
-    const body = bodies[Math.floor(Math.random() * bodies.length)];
+    if (!cleanTitle) cleanTitle = 'Viral Video';
 
-    const cta = callToAction || '👇 Drop your thoughts below and follow for daily game-changing insights!';
+    const isBengali = /[\u0980-\u09FF]/.test(cleanTitle);
+
+    let hook = '';
+    let body = '';
+    let cta = callToAction;
+
+    if (isBengali) {
+      const bengaliHooks = [
+        `🔥 ${cleanTitle} — শেষ পর্যন্ত দেখুন, দারুণ চমক!`,
+        `😂 হাসির ধামাকা: ${cleanTitle} | মিস করবেন না!`,
+        `😲 ভাইরাল কার্টুন: ${cleanTitle} | ভালো লাগলে শেয়ার করুন!`,
+        `✨ ${cleanTitle} — অসাধারণ ৩ডি অ্যানিমেশন!`,
+        `💥 সেরা মুহূর্ত: ${cleanTitle} | পেজটি ফলো করে সাথেই থাকুন!`
+      ];
+      hook = bengaliHooks[Math.floor(Math.random() * bengaliHooks.length)];
+
+      const bengaliBodies = [
+        `ভিডিওটি কেমন লাগলো কমেন্টে জানান! প্রতিদিন নতুন নতুন দারুণ সব কার্টুন ও মজার এনিমেশন ভিডিও পেতে এখনই লাইক দিয়ে সাথে থাকুন।`,
+        `দারুণ বিনোদনের জন্য বন্ধুদের সাথে ভিডিওটি শেয়ার করুন। আপনার একটি লাইক আমাদের পরবর্তী ভিডিও বানাতে অনুপ্রেরণা যোগায়!`,
+        `সবচেয়ে মজার কার্টুন ও এনিমেশন ভিডিও দেখতে আমাদের পেজটি ফলো ও চ্যানেলটি সাবস্ক্রাইব করে রাখুন!`
+      ];
+      body = bengaliBodies[Math.floor(Math.random() * bengaliBodies.length)];
+      if (!cta) cta = '👉 লাইক করুন, কমেন্ট করুন এবং বন্ধুদের সাথে শেয়ার করুন!';
+    } else {
+      const englishHooks = [
+        `🚨 You won't believe what happens: ${cleanTitle}!`,
+        `💡 The secret nobody tells you about ${cleanTitle}!`,
+        `⚡ Stop scrolling! Watch ${cleanTitle} right now!`,
+        `🔥 Viral Alert: ${cleanTitle}`,
+        `😂 Wait for the ending in ${cleanTitle}!`
+      ];
+      hook = englishHooks[Math.floor(Math.random() * englishHooks.length)];
+
+      const englishBodies = [
+        `Watch till the very end for an unexpected twist! You will love how this story unfolds.`,
+        `This is why short-form animation is taking over the internet right now. Hit that like button if you enjoyed this!`,
+        `Pure entertainment delivered daily. Bookmark this reel before the algorithm hides it!`
+      ];
+      body = englishBodies[Math.floor(Math.random() * englishBodies.length)];
+      if (!cta) cta = '👇 Drop your thoughts below and follow for daily videos!';
+    }
 
     // Niche-based hashtags
     const nicheTagsMap = {
-      'Technology & AI': ['#aitools', '#artificialintelligence', '#techtrends', '#futuretech', '#innovation', '#coding', '#software', '#technews'],
-      'Fitness & Health': ['#fitnessmotivation', '#workoutroutine', '#gymlife', '#healthyhabits', '#fitfam', '#weightlossjourney', '#wellness'],
-      'Business & Finance': ['#entrepreneur', '#investing', '#moneytips', '#startup', '#sidehustle', '#financialfreedom', '#businessgrowth'],
-      'Entertainment & Comedy': ['#funny', '#comedy', '#relatable', '#memes', '#humor', '#viralvideos', '#entertainment'],
-      'Education': ['#learning', '#studytips', '#knowledge', '#facts', '#edutok', '#mindset', '#curiosity']
+      'Animation & Cartoon': ['#animation', '#cartoon', '#3danimation', '#animatedshort', '#funnycartoon', '#blender3d'],
+      'Technology & AI': ['#aitools', '#artificialintelligence', '#techtrends', '#futuretech', '#innovation', '#technews'],
+      'Fitness & Health': ['#fitnessmotivation', '#workoutroutine', '#gymlife', '#healthyhabits', '#fitfam'],
+      'Business & Finance': ['#entrepreneur', '#investing', '#moneytips', '#startup', '#sidehustle', '#businessgrowth'],
+      'Entertainment & Comedy': ['#funny', '#comedy', '#relatable', '#memes', '#humor', '#viralvideos'],
+      'Education': ['#learning', '#studytips', '#knowledge', '#facts', '#edutok']
     };
 
-    const universalTags = ['#shorts', '#reels', '#viral', '#fyp', '#explorepage', '#trending'];
-    const chosenNicheTags = nicheTagsMap[niche] || ['#contentcreator', '#viralvideo', '#dailyvibes'];
-    const combinedTags = Array.from(new Set([...chosenNicheTags, ...universalTags])).slice(0, hashtagCount);
+    const universalTags = ['#shorts', '#reels', '#viral', '#trending', '#fyp', '#explorepage', '#viralvideo'];
+    if (isBengali) {
+      universalTags.unshift('#bangla', '#bengali', '#bengalicartoon');
+    }
+
+    const chosenNicheTags = nicheTagsMap[niche] || ['#animation', '#cartoon', '#funny', '#viralshorts'];
+    const combinedTags = Array.from(new Set([...chosenNicheTags, ...universalTags])).slice(0, Math.max(hashtagCount, 6));
 
     const fullCaption = `${hook}\n\n${body}\n\n${cta}\n\n${combinedTags.join(' ')}`;
 

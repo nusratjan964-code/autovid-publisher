@@ -60,9 +60,20 @@ class StorageService {
               });
             }
 
-            if (p.scheduleSettings && Array.isArray(p.scheduleSettings.targetPlatforms)) {
-              if (!p.scheduleSettings.targetPlatforms.includes('facebook')) p.scheduleSettings.targetPlatforms.push('facebook');
-              if (!p.scheduleSettings.targetPlatforms.includes('youtube')) p.scheduleSettings.targetPlatforms.push('youtube');
+            if (p.scheduleSettings) {
+              if (Array.isArray(p.scheduleSettings.targetPlatforms)) {
+                if (!p.scheduleSettings.targetPlatforms.includes('facebook')) p.scheduleSettings.targetPlatforms.push('facebook');
+                if (!p.scheduleSettings.targetPlatforms.includes('youtube')) p.scheduleSettings.targetPlatforms.push('youtube');
+              }
+              if (!p.scheduleSettings.frequency || p.scheduleSettings.frequency === 1) {
+                p.scheduleSettings.frequency = 3;
+              }
+              if (!Array.isArray(p.scheduleSettings.times) || p.scheduleSettings.times.length === 0) {
+                p.scheduleSettings.times = ['19:00', '21:00', '23:00'];
+              }
+              if (!p.scheduleSettings.preferredTime) {
+                p.scheduleSettings.preferredTime = '19:00';
+              }
             }
           });
         }
@@ -165,8 +176,9 @@ class StorageService {
       },
       scheduleSettings: {
         enabled: true,
-        frequency: 1,
-        preferredTime: '18:00',
+        frequency: 3,
+        preferredTime: '19:00',
+        times: ['19:00', '21:00', '23:00'],
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Dhaka',
         postingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
         targetPlatforms: targetPlatforms

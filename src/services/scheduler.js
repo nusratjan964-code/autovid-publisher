@@ -7,47 +7,89 @@ import { GoogleAuthService } from './googleAuth.js';
 
 export class SchedulerService {
   /**
-   * Distributes unposted videos across future dates and syncs to server-side background queue
+   * Distributes unposted videos across future dates (e.g. 3 videos/day at viral night slots)
+   * and syncs to server-side background queue.
    */
-  static async autoScheduleVideos(project, onProgress = null) {
-    const { preferredTime = '18:00', postingDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], targetPlatforms = [] } = project.scheduleSettings;
+  static async autoScheduleVideos(project, onProgress = null, options = {}) {
+    const { 
+      preferredTime = '19:00', 
+      frequency = 3, 
+      times = ['19:00', '21:00', '23:00'], 
+      postingDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], 
+      targetPlatforms = [] 
+    } = project.scheduleSettings || {};
     
-    // Find videos that need scheduling (status 'ready' or 'draft' or 'Pending')
-    const unpostedVideos = project.videos.filter(v => v.status === 'ready' || v.status === 'draft');
+    // Support force reschedule if requested, otherwise unposted / unscheduled videos
+    let unpostedVideos = project.videos.filter(v => {
+      const s = (v.status || '').toLowerCase();
+      if (options.forceAll) return s !== 'published';
+      return s === 'ready' || s === 'draft' || s === 'pending' || s === 'scheduled';
+    });
     
     if (unpostedVideos.length === 0) {
-      return { count: 0, message: 'All videos are already scheduled or published.' };
+      unpostedVideos = project.videos.filter(v => (v.status || '').toLowerCase() !== 'published');
+    }
+    
+    if (unpostedVideos.length === 0) {
+      return { count: 0, message: 'All videos are already published or no videos found.' };
     }
 
-    const [hours, minutes] = preferredTime.split(':').map(Number);
+    // Determine the active daily time slots
+    let activeTimes = Array.isArray(times) && times.length > 0 ? [...times] : ['19:00', '21:00', '23:00'];
+    if (frequency === 1) {
+      activeTimes = [preferredTime || '19:00'];
+    } else if (frequency === 2) {
+      activeTimes = activeTimes.slice(0, 2);
+      if (activeTimes.length < 2) activeTimes = ['19:00', '21:00'];
+    } else if (frequency === 3) {
+      if (activeTimes.length < 3) activeTimes = ['19:00', '21:00', '23:00'];
+    }
+
+    const slotLabels = {
+      '19:00': 'সন্ধ্যা পিক (7:00 PM)',
+      '21:00': 'ভাইরাল প্রাইম (9:00 PM)',
+      '23:00': 'লেট নাইট ওয়াচ (11:00 PM)'
+    };
+
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     let currentDate = new Date();
     // Start from tomorrow
     currentDate.setDate(currentDate.getDate() + 1);
-    currentDate.setHours(hours || 18, minutes || 0, 0, 0);
 
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    // Make sure starting day matches selected posting days
+    while (!postingDays.includes(dayNames[currentDate.getDay()])) {
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    let slotInDay = 0;
     let scheduledCount = 0;
     const queuedItemsToSync = [];
 
     for (let i = 0; i < unpostedVideos.length; i++) {
       const video = unpostedVideos[i];
 
-      // Advance date until it matches one of the chosen posting days
-      while (!postingDays.includes(dayNames[currentDate.getDay()])) {
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+      const slotTime = activeTimes[slotInDay % activeTimes.length];
+      const [hours, minutes] = slotTime.split(':').map(Number);
+      
+      const slotDate = new Date(currentDate);
+      slotDate.setHours(hours || 19, minutes || 0, 0, 0);
 
-      // If video has no caption, generate with AI now
+      // If video has no caption or hashtags, generate with AI now
       if (!video.caption || video.caption.trim().length === 0) {
-        if (onProgress) onProgress(`Generating AI caption for "${video.title.substring(0, 25)}..."`);
-        const aiResult = await AICaptionService.generateCaption(video, project.aiSettings, project.niche);
+        if (onProgress) {
+          onProgress(`ভিডিও ${i + 1}/${unpostedVideos.length} এর জন্য AI ক্যাপশন ও হ্যাশট্যাগ তৈরি হচ্ছে...`);
+        }
+        const aiResult = await AICaptionService.generateCaption(video, project.aiSettings, project.niche || 'Animation & Cartoon');
         video.caption = aiResult.caption;
         video.hook = aiResult.hook;
+        video.hashtags = aiResult.hashtags;
       }
 
-      video.scheduledDate = new Date(currentDate).toISOString();
-      video.status = 'Pending'; // Standard status: Pending | Processing | Published | Failed
-      video.platforms = [...(targetPlatforms.length > 0 ? targetPlatforms : ['facebook', 'youtube', 'insta'])];
+      video.scheduledDate = slotDate.toISOString();
+      video.slotTime = slotTime;
+      video.slotLabel = slotLabels[slotTime] || `Slot ${slotInDay + 1} (${slotTime})`;
+      video.status = 'scheduled'; // Standard status for scheduled queue
+      video.platforms = [...(targetPlatforms.length > 0 ? targetPlatforms : ['facebook', 'youtube'])];
       video.idempotencyKey = `sched_${video.id}_${video.scheduledDate}`;
 
       queuedItemsToSync.push({
@@ -62,8 +104,16 @@ export class SchedulerService {
       });
 
       scheduledCount++;
-      // Move to next day for the next video
-      currentDate.setDate(currentDate.getDate() + 1);
+
+      // Move to next time slot
+      slotInDay++;
+      if (slotInDay >= activeTimes.length) {
+        slotInDay = 0;
+        // Advance to next day
+        do {
+          currentDate.setDate(currentDate.getDate() + 1);
+        } while (!postingDays.includes(dayNames[currentDate.getDay()]));
+      }
     }
 
     // Sync to serverless background queue for automated publishing when dashboard is closed
@@ -78,9 +128,14 @@ export class SchedulerService {
       console.warn('[Scheduler] Queue sync notice:', e.message);
     }
 
+    const totalDays = Math.ceil(scheduledCount / activeTimes.length);
+    const timesDisplay = activeTimes.map(t => slotLabels[t] || t).join(', ');
+
     return {
       count: scheduledCount,
-      message: `Successfully scheduled ${scheduledCount} videos at ${preferredTime} daily! Background auto-posting is active.`
+      days: totalDays,
+      slots: activeTimes,
+      message: `সফলভাবে ${scheduledCount}টি ভিডিও প্রতিদিন ৩টি ভাইরাল সময়ে (${timesDisplay}) পরবর্তী ${totalDays} দিনের জন্য শিডিউল করা হয়েছে!`
     };
   }
 
