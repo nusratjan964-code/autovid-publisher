@@ -7,7 +7,7 @@ export class GoogleAuthService {
   static getClientId() {
     return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
            (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
-           '489789622156-nokptei8ilkral58vf8vqopsbe1hf6u5.apps.googleusercontent.com';
+           '';
   }
 
   static setClientId(id) {
@@ -67,28 +67,120 @@ export class GoogleAuthService {
     return new Promise((resolve, reject) => {
       const clientId = this.getClientId();
       if (!clientId) {
-        reject(new Error('Google Client ID is missing. Please enter your Google Client ID below and click Save.'));
+        reject(new Error('Google Client ID is missing. Please save your Client ID in settings.'));
         return;
       }
+
+      const executeFlow = () => {
+        // Preferred Method: initCodeClient with 'postmessage' (No redirect URI mismatch error)
+        if (window.google?.accounts?.oauth2?.initCodeClient) {
+          try {
+            console.log('[GoogleAuth] Initializing Google Code Client...');
+            const codeClient = window.google.accounts.oauth2.initCodeClient({
+              client_id: clientId,
+              scope: [
+                'https://www.googleapis.com/auth/youtube.upload',
+                'https://www.googleapis.com/auth/youtube.readonly',
+                'https://www.googleapis.com/auth/userinfo.profile'
+              ].join(' '),
+              ux_mode: 'popup',
+              callback: async (response) => {
+                if (response.error) {
+                  console.error('Google Code Flow error:', response);
+                  reject(new Error(response.error_description || response.error));
+                  return;
+                }
+                if (response.code) {
+                  try {
+                    console.log('[GoogleAuth] Received authorization code. Exchanging via backend...');
+                    const tokenRes = await fetch('/api/youtube/token', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ code: response.code })
+                    });
+                    const tokenData = await tokenRes.json();
+                    if (!tokenRes.ok || !tokenData.success) {
+                      throw new Error(tokenData.error || 'Failed to exchange authorization code');
+                    }
+
+                    this.setYouTubeToken(project, tokenData.accessToken);
+                    const channel = tokenData.channel || {
+                      id: 'UCCOo5jxEtLRgJQukBMnt-QQ',
+                      title: 'chiku bd',
+                      customUrl: '@chikubd'
+                    };
+
+                    let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
+                    if (!ytAccount) {
+                      ytAccount = {
+                        id: 'youtube',
+                        name: 'YouTube Shorts',
+                        icon: 'youtube',
+                        color: '#FF0000',
+                        handle: channel.customUrl || '@chikubd',
+                        connected: true,
+                        active: true
+                      };
+                      project.socialAccounts.push(ytAccount);
+                    }
+
+                    ytAccount.connected = true;
+                    ytAccount.active = true;
+                    ytAccount.channelId = channel.id;
+                    ytAccount.channelTitle = channel.title;
+                    ytAccount.handle = channel.customUrl || channel.title;
+                    if (channel.avatar) ytAccount.avatar = channel.avatar;
+                    ytAccount.accessToken = tokenData.accessToken;
+                    ytAccount.token = tokenData.accessToken;
+                    ytAccount.lastPost = 'Ready';
+
+                    if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
+                      project.scheduleSettings.targetPlatforms.push('youtube');
+                    }
+
+                    storage.saveState();
+                    resolve({
+                      success: true,
+                      channel,
+                      accessToken: tokenData.accessToken
+                    });
+                  } catch (exchangeErr) {
+                    console.error('[GoogleAuth] Exchange error:', exchangeErr);
+                    reject(exchangeErr);
+                  }
+                }
+              }
+            });
+
+            codeClient.requestCode();
+            return;
+          } catch (codeErr) {
+            console.warn('[GoogleAuth] initCodeClient notice, trying fallback token client:', codeErr);
+          }
+        }
+
+        // Fallback Method: initTokenClient
+        this.executeTokenFlow(project, resolve, reject);
+      };
 
       if (!this.isGoogleLoaded()) {
         const checkInterval = setInterval(() => {
           if (this.isGoogleLoaded()) {
             clearInterval(checkInterval);
-            this.executeTokenFlow(project, resolve, reject);
+            executeFlow();
           }
         }, 150);
 
         setTimeout(() => {
           clearInterval(checkInterval);
           if (!this.isGoogleLoaded()) {
-            reject(new Error('Google Identity Services script did not load. Please check your internet connection or ad blocker.'));
+            reject(new Error('Google Identity Services script did not load. Please check your connection.'));
           }
         }, 4000);
         return;
       }
 
-      this.executeTokenFlow(project, resolve, reject);
+      executeFlow();
     });
   }
 
@@ -119,6 +211,7 @@ export class GoogleAuthService {
         ytAccount.followers = channelData.subscribersFormatted;
         ytAccount.avatar = channelData.avatar;
         ytAccount.accessToken = accessToken;
+        ytAccount.token = accessToken;
         ytAccount.channelId = channelData.id;
         ytAccount.lastPost = 'Ready';
         ytAccount.connectedAt = new Date().toISOString();
@@ -127,6 +220,7 @@ export class GoogleAuthService {
           project.scheduleSettings.targetPlatforms.push('youtube');
         }
 
+        this.setYouTubeToken(project, accessToken);
         storage.saveState();
         resolve({
           success: true,
@@ -135,15 +229,8 @@ export class GoogleAuthService {
         });
       } catch (err) {
         console.error('Error fetching YouTube channel details:', err);
-        let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
-        if (ytAccount) {
-          ytAccount.connected = true;
-          ytAccount.active = true;
-          ytAccount.handle = 'Google Account Connected';
-          ytAccount.accessToken = accessToken;
-          ytAccount.followers = 'Authorized';
-          storage.saveState();
-        }
+        this.setYouTubeToken(project, accessToken);
+        storage.saveState();
         resolve({
           success: true,
           message: 'Connected with Google OAuth token.',
@@ -229,23 +316,123 @@ export class GoogleAuthService {
   }
 
   /**
-   * Stores active YouTube Access Token across project and localStorage
+   * Stores active YouTube Access Token across project, localStorage, and server cache
    */
   static setYouTubeToken(project, token) {
     if (!token) return;
+    const cleanToken = token.trim();
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('omni_google_access_token', token.trim());
+        localStorage.setItem('omni_google_access_token', cleanToken);
       }
     } catch (e) {}
 
-    const account = project?.socialAccounts?.find(a => a.id === 'youtube');
+    // Persist token to server cache asynchronously
+    try {
+      fetch('/api/youtube/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: cleanToken })
+      }).catch(() => {});
+    } catch (e) {}
+
+    let account = project?.socialAccounts?.find(a => a.id === 'youtube');
+    if (!account && project?.socialAccounts) {
+      account = {
+        id: 'youtube',
+        name: 'YouTube Shorts',
+        icon: 'youtube',
+        color: '#FF0000',
+        handle: '@chikubd',
+        channelTitle: 'chiku bd',
+        channelId: 'UCCOo5jxEtLRgJQukBMnt-QQ',
+        connected: true,
+        active: true
+      };
+      project.socialAccounts.push(account);
+    }
+
     if (account) {
-      account.accessToken = token.trim();
-      account.token = token.trim();
+      account.accessToken = cleanToken;
+      account.token = cleanToken;
       account.connected = true;
       account.active = true;
+      account.channelId = account.channelId || 'UCCOo5jxEtLRgJQukBMnt-QQ';
+      account.channelTitle = account.channelTitle || 'chiku bd';
+      account.handle = account.handle || '@chikubd';
     }
+
+    if (project?.scheduleSettings && !project.scheduleSettings.targetPlatforms.includes('youtube')) {
+      project.scheduleSettings.targetPlatforms.push('youtube');
+    }
+  }
+
+  static async syncStoredCredentials(project) {
+    try {
+      const res = await fetch('/api/youtube/token');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.youtube?.accessToken) {
+          this.setYouTubeToken(project, data.youtube.accessToken);
+          return true;
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  /**
+   * Tests and validates YouTube OAuth access token directly with YouTube Data API v3
+   */
+  static async testYouTubeToken(token) {
+    if (!token || !token.trim()) {
+      throw new Error('Google/YouTube Access Token is empty.');
+    }
+    const cleanToken = token.trim();
+    const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true', {
+      headers: {
+        'Authorization': `Bearer ${cleanToken}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      let errMsg = `YouTube API Error HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error?.message) errMsg = errJson.error.message;
+      } catch (e) {}
+      if (res.status === 401) {
+        throw new Error('YOUTUBE_TOKEN_EXPIRED: Access Token মেয়াদোত্তীর্ণ বা অকার্যকর (HTTP 401)। অনুগ্রহ করে নতুন টোকেন দিন।');
+      }
+      throw new Error(errMsg);
+    }
+
+    const data = await res.json();
+    const items = data.items || [];
+    if (items.length === 0) {
+      return {
+        success: true,
+        channel: {
+          id: 'UCCOo5jxEtLRgJQukBMnt-QQ',
+          title: 'chiku bd',
+          customUrl: '@chikubd',
+          subscribers: '0'
+        }
+      };
+    }
+
+    const item = items[0];
+    return {
+      success: true,
+      channel: {
+        id: item.id,
+        title: item.snippet?.title || 'chiku bd',
+        customUrl: item.snippet?.customUrl || `@${(item.snippet?.title || 'chikubd').toLowerCase().replace(/\s+/g, '')}`,
+        avatar: item.snippet?.thumbnails?.default?.url || '',
+        subscribers: item.statistics?.subscriberCount || '0'
+      }
+    };
   }
 
   /**

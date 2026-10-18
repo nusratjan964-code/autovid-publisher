@@ -17,6 +17,15 @@ class OmniFlowApp {
   init() {
     this.render();
     this.bindGlobalEvents();
+    const activeProject = storage.getActiveProject();
+    if (activeProject) {
+      GoogleAuthService.syncStoredCredentials(activeProject).then(synced => {
+        if (synced) {
+          console.log('[OmniFlow] Restored YouTube OAuth credentials from server cache');
+          this.render();
+        }
+      });
+    }
   }
 
   showToast(message, type = 'success') {
@@ -833,6 +842,12 @@ class OmniFlowApp {
                   <div style="display:flex; gap:6px;">
                     ${platformDef.id === 'facebook' ? `
                       <button class="btn btn-outline btn-sm btn-connect-platform" data-platform-id="facebook" style="border-color:#1877F2; color:#1877F2;" title="Verify or Test Connection">
+                        <i data-lucide="settings-2"></i>
+                        <span>Configure / Test</span>
+                      </button>
+                    ` : ''}
+                    ${platformDef.id === 'youtube' ? `
+                      <button class="btn btn-outline btn-sm btn-connect-platform" data-platform-id="youtube" style="border-color:#FF0000; color:#FF0000;" title="Configure YouTube & OAuth">
                         <i data-lucide="settings-2"></i>
                         <span>Configure / Test</span>
                       </button>
@@ -1675,96 +1690,106 @@ class OmniFlowApp {
   // --- GOOGLE OAUTH 2.0 YOUTUBE MODAL ---
   openYouTubeOAuthModal(platform) {
     const project = storage.getActiveProject();
-    const myDefaultClientId = ['489789622156-nokptei8ilkral58vf8vqopsbe1hf6u5', 'apps.googleusercontent.com'].join('.');
-    let currentClientId = GoogleAuthService.getClientId();
-    if (!currentClientId) {
-      GoogleAuthService.setClientId(myDefaultClientId);
-      currentClientId = myDefaultClientId;
-    }
+    const currentClientId = GoogleAuthService.getClientId();
+
+    const existingToken = GoogleAuthService.getYouTubeToken(project);
+    const ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
+    const defaultHandle = ytAccount?.handle || '@chikubd';
 
     this.openModal(`
       <div class="modal-backdrop">
-        <div class="modal-card">
+        <div class="modal-card" style="max-width:580px;">
           <div class="modal-header">
             <h3 class="modal-title" style="display:flex; align-items:center; gap:10px;">
-              <span style="width:32px; height:32px; border-radius:var(--radius-sm); background:#FF0000; color:white; display:flex; align-items:center; justify-content:center;">
+              <span style="width:34px; height:34px; border-radius:var(--radius-sm); background:#FF0000; color:white; display:flex; align-items:center; justify-content:center;">
                 <i data-lucide="youtube"></i>
               </span>
-              Connect YouTube Channel
+              <span>Connect YouTube Shorts (Data API v3)</span>
             </h3>
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body">
-            <div style="text-align:center; padding:10px 0 16px;">
-              <div style="width:56px; height:56px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 10px; border:2px solid #fca5a5;">
-                <i data-lucide="youtube" style="width:32px; height:32px;"></i>
+            <div style="text-align:center; padding:6px 0 14px;">
+              <div style="width:52px; height:52px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; border:2px solid #fca5a5;">
+                <i data-lucide="youtube" style="width:28px; height:28px;"></i>
               </div>
-              <h4 style="font-size:1.2rem; font-weight:800; color:var(--text-primary);">Google & YouTube OAuth 2.0</h4>
-              <p style="font-size:0.86rem; color:var(--text-muted); margin-top:2px;">
-                Connect your YouTube channel in 1 step using your Google OAuth Client ID.
+              <h4 style="font-size:1.15rem; font-weight:800; color:var(--text-primary);">YouTube Shorts Integration</h4>
+              <p style="font-size:0.84rem; color:var(--text-muted); margin-top:2px;">
+                চ্যানেল <strong>chiku bd</strong> এ স্বয়ংক্রিয়ভাবে ভিডিও আপলোড করতে Google Authorization দিন।
               </p>
             </div>
 
-            <div style="background:var(--bg-subtle); padding:14px; border-radius:var(--radius-md); font-size:0.82rem; margin-bottom:16px; border:1px solid var(--border-light);">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-weight:700; color:var(--text-primary);">Google Client ID:</span>
-                <span class="badge badge-success">Configured</span>
-              </div>
-              <div style="display:flex; gap:8px;">
-                <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId}" placeholder="Enter Client ID" style="font-size:0.78rem; font-family:var(--font-mono);" />
-                <button class="btn btn-outline btn-sm" id="btn-save-client-id">Save</button>
-              </div>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:6px;">
-                Required Origin in Google Cloud Console: <strong>${window.location.origin}</strong>
-              </div>
-            </div>
-
-            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:var(--radius-md); padding:10px 14px; font-size:0.82rem; color:#166534; margin-bottom:16px;">
-              <strong><i data-lucide="check-shield"></i> Official YouTube Integration:</strong>
-              <div style="margin-top:2px; line-height:1.45;">
-                • Auto-fetches your authentic channel name, avatar, and subscribers<br>
-                • Uploads videos directly as YouTube Shorts
-              </div>
-            </div>
-
+            <!-- Option A: 1-Click Connect Button -->
             <button class="btn btn-primary btn-lg" id="btn-trigger-google-oauth" style="width:100%; display:flex; align-items:center; justify-content:center; gap:10px; background:#FF0000; border-color:#FF0000; font-weight:700;">
               <i data-lucide="play-circle"></i>
-              <span>1-Step Connect YouTube with Google</span>
+              <span>Google OAuth 1-Click Connect</span>
             </button>
 
-            <div style="margin:16px 0; display:flex; align-items:center; gap:10px;">
+            <div style="margin:14px 0; display:flex; align-items:center; gap:10px;">
               <div style="flex:1; height:1px; background:var(--border-light);"></div>
-              <span style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">or link handle manually</span>
+              <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:700;">অথবা সরাসরি টোকেন দিয়ে কানেক্ট করুন</span>
               <div style="flex:1; height:1px; background:var(--border-light);"></div>
             </div>
 
-            <div class="form-group" style="margin-bottom:0;">
-              <input type="text" class="form-input" id="manual-yt-handle" placeholder="Enter channel name or @handle manually" />
+            <!-- Option B: Direct Token Paste & OAuth Playground helper -->
+            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <label style="font-size:0.82rem; font-weight:700; color:var(--text-primary); margin:0;">
+                  Google OAuth Access Token:
+                </label>
+                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:#FF0000; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
+                  <span>Google OAuth Playground</span>
+                  <i data-lucide="external-link" style="width:11px; height:11px;"></i>
+                </a>
+              </div>
+              <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical;" placeholder="ya29... (Google Access Token পেস্ট করুন)">${existingToken || ''}</textarea>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px; line-height:1.4;">
+                <span style="color:#FF0000; font-weight:600;">টিপস:</span> Google OAuth Playground থেকে <code>youtube.upload</code> পারমিশন নিয়ে 'Authorize APIs' &rarr; 'Exchange authorization code for tokens' করলেই টোকেন পাওয়া যায়।
+              </div>
+
+              <div id="yt-token-verify-status" style="margin-top:8px; display:none;"></div>
+
+              <div style="display:flex; gap:8px; margin-top:10px;">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-verify-save-yt-token" style="background:#FF0000; border-color:#FF0000; flex:1; display:flex; align-items:center; justify-content:center; gap:6px;">
+                  <i data-lucide="check-circle-2"></i>
+                  <span>টোকেন যাচাই ও সেভ করুন</span>
+                </button>
+              </div>
             </div>
+
+            <!-- Advanced Client ID settings toggle -->
+            <details style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:8px;">
+              <summary style="cursor:pointer; font-weight:600; color:var(--text-muted);">Client ID কনফিগারেশন</summary>
+              <div style="margin-top:8px; display:flex; gap:6px;">
+                <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId || ''}" placeholder="Enter Client ID" style="font-size:0.76rem; font-family:var(--font-mono);" />
+                <button class="btn btn-outline btn-sm" id="btn-save-client-id">Save</button>
+              </div>
+            </details>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-outline btn-close-modal">Cancel</button>
-            <button class="btn btn-outline" id="btn-save-manual-yt">Save Handle</button>
+            <button class="btn btn-outline btn-close-modal">বাতিল</button>
           </div>
         </div>
       </div>
     `);
+    this.refreshIcons();
 
     const saveClientIdBtn = document.getElementById('btn-save-client-id');
     if (saveClientIdBtn) {
       saveClientIdBtn.addEventListener('click', () => {
-        const val = document.getElementById('input-oauth-client-id').value.trim() || myDefaultClientId;
-        GoogleAuthService.setClientId(val);
+        const val = document.getElementById('input-oauth-client-id').value.trim();
+        if (val) GoogleAuthService.setClientId(val);
         this.showToast('Google Client ID saved!', 'success');
       });
     }
 
+    // 1. Google 1-Click Button
     document.getElementById('btn-trigger-google-oauth').addEventListener('click', async () => {
       const btn = document.getElementById('btn-trigger-google-oauth');
       let id = GoogleAuthService.getClientId();
       if (!id) {
-        const val = document.getElementById('input-oauth-client-id').value.trim() || myDefaultClientId;
-        GoogleAuthService.setClientId(val);
+        const val = document.getElementById('input-oauth-client-id').value.trim();
+        if (val) GoogleAuthService.setClientId(val);
       }
 
       btn.disabled = true;
@@ -1779,19 +1804,83 @@ class OmniFlowApp {
         console.warn('Google OAuth error:', err);
         btn.disabled = false;
         btn.innerHTML = '<i data-lucide="play-circle"></i> Try Again with Google';
-        createIcons({ icons });
-
-        alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nNote: If you see origin_mismatch, make sure ${window.location.origin} is added to Authorized JavaScript Origins in your Google Cloud Console.`);
+        this.refreshIcons();
+        alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nআপনি চাইলে উপরের Google OAuth Playground লিংক থেকে সরাসরি Access Token কপি করে নিচে পেস্ট করতে পারেন।`);
       }
     });
 
-    document.getElementById('btn-save-manual-yt').addEventListener('click', () => {
-      const handle = document.getElementById('manual-yt-handle').value.trim();
-      SocialManagerService.connectPlatform(project, 'youtube', handle || '@mychannel');
-      storage.saveState();
-      this.closeModal();
-      this.showToast('YouTube connected!', 'success');
-      this.render();
+    // 2. Token Verify & Save Button
+    document.getElementById('btn-verify-save-yt-token').addEventListener('click', async () => {
+      const tokenInput = (document.getElementById('modal-yt-token-input')?.value || '').trim();
+      const statusBox = document.getElementById('yt-token-verify-status');
+
+      if (!tokenInput) {
+        alert('অনুগ্রহ করে Google/YouTube Access Token পেস্ট করুন।');
+        return;
+      }
+
+      const btn = document.getElementById('btn-verify-save-yt-token');
+      btn.disabled = true;
+      btn.innerText = 'যাচাই হচ্ছে...';
+
+      if (statusBox) {
+        statusBox.style.display = 'block';
+        statusBox.innerHTML = '<span style="font-size:0.78rem; color:var(--text-muted);">YouTube Data API v3 এর সাথে যোগাযোগ করা হচ্ছে...</span>';
+      }
+
+      try {
+        const check = await GoogleAuthService.testYouTubeToken(tokenInput);
+        GoogleAuthService.setYouTubeToken(project, tokenInput);
+
+        const ch = check.channel;
+        let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
+        if (!ytAcc) {
+          ytAcc = { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', connected: true, active: true };
+          project.socialAccounts.push(ytAcc);
+        }
+        ytAcc.connected = true;
+        ytAcc.active = true;
+        ytAcc.channelId = ch.id;
+        ytAcc.channelTitle = ch.title;
+        ytAcc.handle = ch.customUrl || `@${(ch.title || '').toLowerCase().replace(/\s+/g, '')}`;
+        ytAcc.accessToken = tokenInput;
+        ytAcc.token = tokenInput;
+        ytAcc.lastPost = 'Ready';
+        if (ch.avatar) ytAcc.avatar = ch.avatar;
+
+        if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
+          project.scheduleSettings.targetPlatforms.push('youtube');
+        }
+
+        storage.saveState();
+
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:600;">
+              ✓ চ্যানেল ভেরিফাইড: <strong>${ch.title}</strong> (${ch.id}) &bull; ${ch.subscribers} সাবস্ক্রাইবার
+            </div>
+          `;
+        }
+
+        this.showToast(`🎉 YouTube চ্যানেল "${ch.title}" সফলভাবে সংযুক্ত হয়েছে!`, 'success');
+        setTimeout(() => {
+          this.closeModal();
+          this.render();
+        }, 1200);
+
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check-circle-2"></i> <span>টোকেন যাচাই ও সেভ করুন</span>';
+        this.refreshIcons();
+
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#EF4444;">
+              ⚠ ত্রুটি: ${err.message}
+            </div>
+          `;
+        }
+      }
     });
   }
 
@@ -1880,7 +1969,21 @@ class OmniFlowApp {
 
     document.getElementById('btn-modal-publish-now')?.addEventListener('click', async () => {
       const activeFb = project.socialAccounts.find(a => a.id === 'facebook' && a.connected && a.active);
-      const targetName = activeFb ? (activeFb.pageName || 'Facebook Page') : 'Connected Social Accounts';
+      const activeYt = project.socialAccounts.find(a => a.id === 'youtube' && a.connected && a.active);
+      const targets = [];
+      if (activeFb) targets.push(activeFb.pageName || 'Facebook Page');
+      if (activeYt) targets.push(activeYt.channelTitle || 'YouTube Shorts');
+      const targetName = targets.length > 0 ? targets.join(' & ') : 'Connected Social Accounts';
+
+      const fbToken = SocialManagerService.getFacebookToken(project);
+      const ytToken = GoogleAuthService.getYouTubeToken(project);
+
+      if ((activeFb && !fbToken) || (activeYt && !ytToken)) {
+        this.closeModal();
+        this.openPublishTokenModal(project, videoId, 'ফেসবুক এবং ইউটিউবে একসাথে লাইভ ভিডিও পোস্ট করতে Token প্রয়োজন।');
+        return;
+      }
+
       if (!confirm(`Do you want to publish "${video.title}" to ${targetName} now?`)) return;
 
       this.closeModal();
@@ -1893,7 +1996,11 @@ class OmniFlowApp {
         this.showToast(`🎉 "${video.title}" published successfully to ${targetName}!`, 'success');
         this.render();
       } catch (err) {
-        this.showToast(err.message, 'error');
+        if (err.message && (err.message.includes('TOKEN') || err.message.includes('190') || err.message.includes('token') || err.message.includes('টোকেন') || err.message.includes('Access Token'))) {
+          this.openPublishTokenModal(project, videoId, err.message);
+        } else {
+          this.showToast(err.message, 'error');
+        }
         this.render();
       }
     });
@@ -1998,7 +2105,19 @@ class OmniFlowApp {
         if (!video) return;
 
         const activeFb = project.socialAccounts.find(a => a.id === 'facebook' && a.connected && a.active);
-        const targetName = activeFb ? (activeFb.pageName || 'Facebook Page') : 'Connected Social Accounts';
+        const activeYt = project.socialAccounts.find(a => a.id === 'youtube' && a.connected && a.active);
+        const targets = [];
+        if (activeFb) targets.push(activeFb.pageName || 'Facebook Page');
+        if (activeYt) targets.push(activeYt.channelTitle || 'YouTube Shorts');
+        const targetName = targets.length > 0 ? targets.join(' & ') : 'Connected Social Accounts';
+
+        const fbToken = SocialManagerService.getFacebookToken(project);
+        const ytToken = GoogleAuthService.getYouTubeToken(project);
+
+        if ((activeFb && !fbToken) || (activeYt && !ytToken)) {
+          this.openPublishTokenModal(project, vidId, 'ফেসবুক এবং ইউটিউবে একসাথে লাইভ ভিডিও পোস্ট করতে Token প্রয়োজন।');
+          return;
+        }
 
         if (!confirm(`Do you want to publish "${video.title}" to ${targetName} now?`)) {
           return;
@@ -2337,9 +2456,17 @@ class OmniFlowApp {
     const activeFb = activeChannels.find(a => a.id === 'facebook');
     const fbToken = SocialManagerService.getFacebookToken(project);
 
-    if (activeFb && !fbToken && !forceSim) {
-      this.openPublishTokenModal(project, null, 'Facebook Access Token অনুপস্থিত। লাইভ পোস্ট করতে টোকেন দিন অথবা সিমুলেশন মোডে পাবলিশ সম্পন্ন করুন।');
-      return;
+    const activeYt = activeChannels.find(a => a.id === 'youtube');
+    const ytToken = GoogleAuthService.getYouTubeToken(project);
+
+    if (!forceSim) {
+      if ((activeFb && !fbToken) || (activeYt && !ytToken)) {
+        const missing = [];
+        if (activeFb && !fbToken) missing.push('Facebook Access Token');
+        if (activeYt && !ytToken) missing.push('YouTube Access Token');
+        this.openPublishTokenModal(project, null, `${missing.join(' এবং ')} অনুপস্থিত। ফেসবুক এবং ইউটিউবে একসাথে লাইভ ভিডিও আপলোড করতে টোকেন দিন অথবা টেস্ট করুন।`);
+        return;
+      }
     }
 
     try {
@@ -2489,22 +2616,38 @@ class OmniFlowApp {
                 </span>
               </div>
 
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:4px;">
+                <label style="font-size:0.78rem; font-weight:600; color:var(--text-primary); margin:0;">
+                  Google / YouTube Access Token:
+                </label>
+                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:#FF0000; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
+                  <span>OAuth Playground</span>
+                  <i data-lucide="external-link" style="width:11px; height:11px;"></i>
+                </a>
+              </div>
+
+              <div style="display:flex; gap:6px;">
+                <input type="text" class="form-input" id="quick-youtube-token" value="${existingYtToken || ''}" placeholder="ya29... (Google Access Token পেস্ট করুন)" style="font-family:monospace; font-size:0.8rem; flex:1;" />
+                <button type="button" class="btn btn-outline btn-sm" id="btn-modal-test-youtube" style="border-color:#FF0000; color:#FF0000; font-size:0.78rem; white-space:nowrap;">
+                  টোকেন টেস্ট
+                </button>
+              </div>
+
+              <div id="modal-yt-verify-status" style="margin-top:6px; display:none;"></div>
+
               <div style="display:flex; gap:8px; margin-top:8px;">
-                <button type="button" class="btn btn-outline btn-sm" id="btn-modal-connect-google" style="flex:1; border-color:#FF0000; color:#FF0000; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-modal-connect-google" style="flex:1; border-color:#FF0000; color:#FF0000; display:flex; align-items:center; justify-content:center; gap:6px; font-size:0.78rem;">
                   <i data-lucide="play-circle"></i>
                   <span>Google OAuth 1-Click Connect</span>
                 </button>
-              </div>
-              <div class="form-group" style="margin-bottom:0; margin-top:8px;">
-                <input type="password" class="form-input" id="quick-youtube-token" value="${existingYtToken || ''}" placeholder="অথবা Google OAuth Access Token পেস্ট করুন" style="font-family:monospace; font-size:0.8rem;" />
               </div>
             </div>
 
             <!-- Primary Action Buttons -->
             <div style="display:flex; gap:10px; margin-top:14px;">
-              <button class="btn btn-primary" id="btn-submit-token-and-publish" style="flex:1; background:linear-gradient(135deg, #1877F2, #4F46E5); border:none; padding:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:700;">
+              <button class="btn btn-primary" id="btn-submit-token-and-publish" style="flex:1; background:linear-gradient(135deg, #1877F2, #FF0000); border:none; padding:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:700;">
                 <i data-lucide="rocket"></i>
-                <span>আসল ভিডিও ফাইল আপলোড করুন (Live Post)</span>
+                <span>ফেসবুক ও ইউটিউবে আসল ভিডিও আপলোড করুন (Live Post)</span>
               </button>
             </div>
 
@@ -2527,6 +2670,21 @@ class OmniFlowApp {
     `);
     this.refreshIcons();
 
+    // Check server credentials cache for YouTube token on modal open
+    fetch('/api/youtube/token').then(r => r.json()).then(data => {
+      if (data.youtube?.accessToken) {
+        const inp = document.getElementById('quick-youtube-token');
+        if (inp && !inp.value) {
+          inp.value = data.youtube.accessToken;
+          const badge = document.getElementById('modal-yt-badge');
+          if (badge) {
+            badge.className = 'badge badge-success';
+            badge.textContent = `OAuth Ready (${data.youtube.channelTitle || 'chiku bd'})`;
+          }
+        }
+      }
+    }).catch(() => {});
+
     let selectedFileBlob = currentBlob;
     const filePicker = document.getElementById('modal-publish-file-input');
     if (filePicker) {
@@ -2545,6 +2703,56 @@ class OmniFlowApp {
             badge.className = 'badge badge-success';
             badge.innerHTML = `✓ ভিডিও ফাইল প্রস্তুত (${sizeMb} MB)`;
           }
+        }
+      });
+    }
+
+    // Test YouTube Token
+    const testYtBtn = document.getElementById('btn-modal-test-youtube');
+    if (testYtBtn) {
+      testYtBtn.addEventListener('click', async () => {
+        const val = (document.getElementById('quick-youtube-token')?.value || '').trim();
+        const statusBox = document.getElementById('modal-yt-verify-status');
+        if (!val) {
+          alert('অনুগ্রহ করে Google/YouTube Access Token দিন।');
+          return;
+        }
+        testYtBtn.disabled = true;
+        testYtBtn.innerText = 'যাচাই...';
+        if (statusBox) {
+          statusBox.style.display = 'block';
+          statusBox.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">YouTube Data API v3 যাচাই হচ্ছে...</span>';
+        }
+
+        try {
+          const testRes = await GoogleAuthService.testYouTubeToken(val);
+          GoogleAuthService.setYouTubeToken(project, val);
+          storage.saveState();
+          const ch = testRes.channel;
+          const badge = document.getElementById('modal-yt-badge');
+          if (badge) {
+            badge.className = 'badge badge-success';
+            badge.textContent = `OAuth Ready (${ch.title})`;
+          }
+          if (statusBox) {
+            statusBox.innerHTML = `
+              <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:4px 8px; font-size:0.76rem; color:#10B981; font-weight:600;">
+                ✓ ভেরিফাইড চ্যানেল: <strong>${ch.title}</strong> (${ch.id}) &bull; Shorts Ready
+              </div>
+            `;
+          }
+          this.showToast(`YouTube চ্যানেল "${ch.title}" ভেরিফাইড!`, 'success');
+        } catch (err) {
+          if (statusBox) {
+            statusBox.innerHTML = `
+              <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:4px 8px; font-size:0.76rem; color:#EF4444;">
+                ⚠ ত্রুটি: ${err.message}
+              </div>
+            `;
+          }
+        } finally {
+          testYtBtn.disabled = false;
+          testYtBtn.innerText = 'টোকেন টেস্ট';
         }
       });
     }
@@ -2597,7 +2805,7 @@ class OmniFlowApp {
 
       const btn = document.getElementById('btn-submit-token-and-publish');
       btn.disabled = true;
-      btn.innerHTML = '<span>আসল ভিডিও ফাইল আপলোড হচ্ছে...</span>';
+      btn.innerHTML = '<span>ফেসবুক ও ইউটিউবে আসল ভিডিও আপলোড হচ্ছে...</span>';
 
       try {
         this.closeModal();
@@ -2607,6 +2815,7 @@ class OmniFlowApp {
           if (p.message) this.showToast(p.message, 'info');
         }, {
           token: fbToken,
+          youtubeToken: ytToken,
           fileBlob: selectedFileBlob || currentBlob
         });
 

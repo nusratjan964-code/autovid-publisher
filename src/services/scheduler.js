@@ -244,6 +244,38 @@ export class SchedulerService {
       throw new Error(`VIDEO_BINARY_REQUIRED: ভিডিও ফাইলটির বাইনারি ডেটা ব্রাউজার ক্যাশে পাওয়া যায়নি। ফেসবুক ও ইউটিউবে আসল ভিডিও আপলোড করতে অনুগ্রহ করে ভিডিও ফাইলটি সিলেক্ট করুন।`);
     }
 
+    // Pre-flight Credentials Resolution & Validation
+    const fbAccount = activeConnectedPlatforms.find(a => a.id === 'facebook');
+    const ytAccount = activeConnectedPlatforms.find(a => a.id === 'youtube');
+
+    const fbToken = (options.token || fbAccount?.accessToken || fbAccount?.token || SocialManagerService.getFacebookToken(project) || '').trim();
+    let ytToken = (options.youtubeToken || options.ytToken || ytAccount?.accessToken || ytAccount?.token || GoogleAuthService.getYouTubeToken(project) || '').trim();
+
+    // If live mode and ytToken missing, attempt quick restore from server credentials cache
+    if (!ytToken && ytAccount && !isSimulated) {
+      try {
+        const sRes = await fetch('/api/youtube/token');
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          if (sData.youtube?.accessToken) {
+            ytToken = sData.youtube.accessToken;
+            GoogleAuthService.setYouTubeToken(project, ytToken);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // MANDATORY PRE-FLIGHT CHECK:
+    // If running in live mode, ensure BOTH active platforms have credentials BEFORE ANY upload starts!
+    if (!isSimulated) {
+      if (fbAccount && !fbToken) {
+        throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token অনুপস্থিত। ফেসবুকে পোস্ট করতে Access Token দিন।');
+      }
+      if (ytAccount && !ytToken) {
+        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token অনুপস্থিত। ইউটিউব শর্টস-এ ভিডিও আপলোড করতে Google Access Token দিন।');
+      }
+    }
+
     // Step 4: Social Platform Media Upload
     onProgress({ step: 3, percent: 55, message: `Broadcasting to ${platformNames.join(', ')}...` });
 
@@ -251,7 +283,6 @@ export class SchedulerService {
     const errors = [];
 
     // --- 1. FACEBOOK META GRAPH API VIDEO / REELS UPLOAD ---
-    const fbAccount = activeConnectedPlatforms.find(a => a.id === 'facebook');
     if (fbAccount) {
       const pageName = fbAccount.pageName || 'Chiku bd';
       const targetPageId = fbAccount.pageId || '1309863422219233';
@@ -264,12 +295,6 @@ export class SchedulerService {
       } else {
         try {
           onProgress({ step: 4, percent: 75, message: `Publishing real video to Facebook Page "${pageName}"...` });
-
-          const fbToken = (options.token || fbAccount.accessToken || fbAccount.token || SocialManagerService.getFacebookToken(project) || '').trim();
-
-          if (!fbToken) {
-            throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token পাওয়া যায়নি। অনুগ্রহ করে Social Media ট্যাবে পেজটি পুনরায় কানেক্ট করুন।');
-          }
 
           onProgress({ step: 4, percent: 80, message: `Facebook Page ভিডিও আপলোড অনুমতি চাওয়া হচ্ছে...` });
 
@@ -331,7 +356,6 @@ export class SchedulerService {
     }
 
     // --- 2. YOUTUBE SHORTS UPLOAD (DATA API V3) ---
-    const ytAccount = activeConnectedPlatforms.find(a => a.id === 'youtube');
     if (ytAccount) {
       if (isSimulated) {
         onProgress({ step: 4, percent: 88, message: `Publishing to YouTube Shorts (Simulation Mode)...` });
@@ -339,11 +363,6 @@ export class SchedulerService {
         const ytId = video.id ? video.id.substring(0, 11) : Math.random().toString(36).substring(2, 13);
         externalUrls['YouTube Shorts'] = `https://www.youtube.com/shorts/${ytId}`;
       } else {
-        const ytToken = GoogleAuthService.getYouTubeToken(project);
-        if (!ytToken) {
-          throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube চ্যানেল কানেক্ট করা নেই বা Google Access Token পাওয়া যায়নি। অনুগ্রহ করে YouTube কানেক্ট করুন।');
-        }
-
         const channelLabel = ytAccount.channelTitle || ytAccount.handle || 'Channel';
         const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
         onProgress({ step: 4, percent: 88, message: `YouTube Shorts-এ আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে (${channelLabel})...` });

@@ -22,6 +22,8 @@ function apiDevServerPlugin() {
             handlerModule = await import('./api/facebook/upload-video.js');
           } else if (pathname === '/api/youtube/upload-video') {
             handlerModule = await import('./api/youtube/upload-video.js');
+          } else if (pathname === '/api/youtube/token') {
+            handlerModule = await import('./api/youtube/token.js');
           } else if (pathname === '/api/facebook/pages') {
             handlerModule = await import('./api/facebook/pages.js');
           } else if (pathname === '/api/facebook/select-page') {

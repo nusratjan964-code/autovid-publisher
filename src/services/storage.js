@@ -46,6 +46,11 @@ class StorageService {
                   }
                 }
                 if (a.id === 'youtube') {
+                  a.channelTitle = a.channelTitle || 'chiku bd';
+                  a.channelId = a.channelId || 'UCCOo5jxEtLRgJQukBMnt-QQ';
+                  a.handle = a.handle || '@chikubd';
+                  a.connected = true;
+                  a.active = true;
                   if (cachedYtToken) {
                     a.accessToken = cachedYtToken;
                     a.token = cachedYtToken;
@@ -53,6 +58,11 @@ class StorageService {
                   a.tokenConfigured = !!(a.accessToken || a.token || cachedYtToken);
                 }
               });
+            }
+
+            if (p.scheduleSettings && Array.isArray(p.scheduleSettings.targetPlatforms)) {
+              if (!p.scheduleSettings.targetPlatforms.includes('facebook')) p.scheduleSettings.targetPlatforms.push('facebook');
+              if (!p.scheduleSettings.targetPlatforms.includes('youtube')) p.scheduleSettings.targetPlatforms.push('youtube');
             }
           });
         }
