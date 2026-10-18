@@ -1,7 +1,6 @@
 import {
   getPageAccessToken,
-  getActivePageSanitized,
-  getCredentialsState
+  getActivePageSanitized
 } from './credentials.js';
 
 const GRAPH_VERSION = 'v21.0';
@@ -80,27 +79,26 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2. Query /me to understand token scope
+    // 2. Query /me with minimal supported fields (id,name,category,link)
     let meData = null;
     try {
-      const meRes = await fetch(`${GRAPH_BASE}/me?fields=id,name,category,tasks,is_published,link&access_token=${encodeURIComponent(token)}`);
+      const meRes = await fetch(`${GRAPH_BASE}/me?fields=id,name,category,link&access_token=${encodeURIComponent(token)}`);
       meData = await meRes.json();
       if (!meRes.ok) meData = null;
     } catch (e) {}
 
     // Check if token belongs directly to a Page
-    const isDirectPageToken = debugInfo?.type === 'PAGE' || !!meData?.category || !!meData?.tasks;
+    const isDirectPageToken = debugInfo?.type === 'PAGE' || !!meData?.category;
 
     let targetPageId = pageId;
     let pageData = null;
 
     if (isDirectPageToken && meData?.id) {
-      // Direct Page Access Token
       pageData = meData;
       targetPageId = meData.id;
     } else if (targetPageId) {
-      // Query specific Page with the token
-      const pageRes = await fetch(`${GRAPH_BASE}/${encodeURIComponent(targetPageId)}?fields=id,name,link,is_published,tasks&access_token=${encodeURIComponent(token)}`);
+      // Query specific Page with the token using supported fields
+      const pageRes = await fetch(`${GRAPH_BASE}/${encodeURIComponent(targetPageId)}?fields=id,name,category,link&access_token=${encodeURIComponent(token)}`);
       const pData = await pageRes.json();
 
       if (pageRes.ok && pData.id) {
@@ -141,7 +139,6 @@ export default async function handler(req, res) {
         });
       }
     } else {
-      // Neither pageId provided nor direct page token
       return res.status(200).json({
         success: false,
         connected: false,
@@ -168,10 +165,9 @@ export default async function handler(req, res) {
     const scopes = Array.isArray(debugInfo?.scopes) ? debugInfo.scopes : [];
     const requiredScopes = ['pages_manage_posts', 'publish_video'];
     const missingScopes = requiredScopes.filter(s => !scopes.includes(s));
-    const tokenType = debugInfo?.type || (pageData.tasks ? 'PAGE' : 'USER');
+    const tokenType = debugInfo?.type || (pageData.category ? 'PAGE' : 'USER');
 
-    const canPost = (tokenType === 'PAGE' || missingScopes.length === 0) &&
-      (!Array.isArray(pageData.tasks) || pageData.tasks.some(t => ['CREATE_CONTENT', 'MANAGE', 'MODERATE'].includes(t.toUpperCase())));
+    const canPost = tokenType === 'PAGE' || missingScopes.length === 0;
 
     return res.status(200).json({
       success: true,
@@ -180,13 +176,11 @@ export default async function handler(req, res) {
       pageId: pageData.id || targetPageId,
       pageName: pageData.name || 'Facebook Page',
       pageLink: pageData.link || `https://facebook.com/${targetPageId}`,
-      isPublished: pageData.is_published ?? true,
       tokenValid: true,
       tokenType,
       expiresAt: debugInfo?.expires_at ? new Date(debugInfo.expires_at * 1000).toISOString() : 'Permanent (Page Token)',
       scopes,
       missingScopes,
-      tasks: pageData.tasks || [],
       canPost,
       message: `✅ Facebook Page "${pageData.name}" (ID: ${pageData.id}) সফলভাবে যাচাইকৃত ও প্রস্তুত!`
     });

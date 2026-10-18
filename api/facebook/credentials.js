@@ -21,7 +21,7 @@ function loadCredentials() {
     userToken: null,
     user: null,
     activePageId: null,
-    pages: {} // map of pageId => { id, name, category, tasks, accessToken, link, isPublished }
+    pages: {} // map of pageId => { id, name, category, accessToken, link }
   };
 }
 
@@ -52,11 +52,9 @@ export function persistFacebookPages({ userToken = null, user = null, pages = []
     state.pages[p.id] = {
       id: p.id,
       name: p.name,
-      category: p.category || '',
-      tasks: p.tasks || [],
+      category: p.category || 'Facebook Page',
       accessToken: p.access_token || p.accessToken || '',
       link: p.link || `https://facebook.com/${p.id}`,
-      isPublished: p.is_published ?? true,
       updatedAt: new Date().toISOString()
     };
   });
@@ -107,7 +105,7 @@ export function getPageAccessToken(requestedPageId = null) {
     return state.pages[state.activePageId].accessToken;
   }
 
-  // 4. Fallback: if user token exists and can be used for debugging
+  // 4. Fallback: if user token exists and can be used
   return state.userToken || null;
 }
 
@@ -124,9 +122,7 @@ export function getActivePageSanitized() {
       pageId: page.id,
       pageName: page.name,
       category: page.category,
-      tasks: page.tasks,
       link: page.link,
-      isPublished: page.isPublished,
       tokenConfigured: !!page.accessToken
     };
   }
@@ -151,12 +147,8 @@ export function getSanitizedPages() {
     id: p.id,
     name: p.name,
     category: p.category,
-    tasks: p.tasks,
     link: p.link,
-    isPublished: p.isPublished,
-    canPublish: Array.isArray(p.tasks)
-      ? p.tasks.some(t => ['CREATE_CONTENT', 'MANAGE', 'MODERATE'].includes(t.toUpperCase()))
-      : true
+    canPublish: true
   }));
 }
 
