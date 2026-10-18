@@ -25,19 +25,32 @@ class StorageService {
       const data = localStorage.getItem(STORAGE_KEY);
       if (data) {
         const parsed = JSON.parse(data);
-        // Security sanitization: ensure tokens are never retained in localStorage
         if (Array.isArray(parsed?.projects)) {
+          const cachedFbToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_fb_page_token') : '') || '';
+          const cachedYtToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '') || '';
+
           parsed.projects.forEach(p => {
             if (Array.isArray(p.socialAccounts)) {
               p.socialAccounts.forEach(a => {
                 if (a.id === 'facebook') {
-                  if (a.token) {
-                    a.tokenConfigured = true;
-                    delete a.token;
+                  if (a.token && !cachedFbToken && typeof localStorage !== 'undefined') {
+                    try { localStorage.setItem('omni_fb_page_token', a.token); } catch (e) {}
                   }
+                  if (cachedFbToken) {
+                    a.accessToken = cachedFbToken;
+                    a.token = cachedFbToken;
+                  }
+                  a.tokenConfigured = !!(a.accessToken || a.token || cachedFbToken);
                   if (a.name === 'Facebook Reels') {
                     a.name = 'Facebook Reels & Page';
                   }
+                }
+                if (a.id === 'youtube') {
+                  if (cachedYtToken) {
+                    a.accessToken = cachedYtToken;
+                    a.token = cachedYtToken;
+                  }
+                  a.tokenConfigured = !!(a.accessToken || a.token || cachedYtToken);
                 }
               });
             }

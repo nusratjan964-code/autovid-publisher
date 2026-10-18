@@ -167,9 +167,13 @@ class OmniFlowApp {
                 <i data-lucide="folder-sync"></i>
                 <span>Sync Videos</span>
               </button>
+              <button class="btn btn-outline btn-sm" id="btn-header-simulate" ${project.videos.length === 0 ? 'disabled' : ''} style="border-color:#10B981; color:#10B981;">
+                <i data-lucide="play-circle"></i>
+                <span>Simulate Publish</span>
+              </button>
               <button class="btn btn-primary btn-sm" id="btn-header-publish" ${project.videos.length === 0 ? 'disabled' : ''}>
                 <i data-lucide="send"></i>
-                <span>Simulate Auto-Publish</span>
+                <span>Auto-Publish Video</span>
               </button>
             </div>
           </header>
@@ -1961,7 +1965,12 @@ class OmniFlowApp {
 
     const headerPublish = document.getElementById('btn-header-publish');
     if (headerPublish) {
-      headerPublish.addEventListener('click', () => this.runPublishAction());
+      headerPublish.addEventListener('click', () => this.runPublishAction(false));
+    }
+
+    const headerSimulate = document.getElementById('btn-header-simulate');
+    if (headerSimulate) {
+      headerSimulate.addEventListener('click', () => this.runPublishAction(true));
     }
 
     const dashAutoSched = document.getElementById('btn-dash-auto-schedule') || document.getElementById('btn-run-auto-scheduler') || document.getElementById('btn-schedule-pipeline-view');
@@ -2351,70 +2360,155 @@ class OmniFlowApp {
     }
   }
 
-  openPublishTokenModal(project, targetVideoId = null, errorContext = '') {
+  async openPublishTokenModal(project, targetVideoId = null, errorContext = '') {
+    let targetVideo = targetVideoId ? project.videos.find(v => v.id === targetVideoId) : null;
+    if (!targetVideo) {
+      targetVideo = project.videos.find(v => v.status === 'Processing' || v.status === 'Pending' || v.status === 'Failed' || v.status === 'ready') || project.videos[0];
+    }
+
+    let currentBlob = null;
+    if (targetVideo) {
+      currentBlob = await SchedulerService.resolveVideoBlob(targetVideo);
+    }
+
     const fbAccount = project.socialAccounts?.find(a => a.id === 'facebook');
     const pageName = fbAccount?.pageName || 'Chiku bd';
     const pageId = fbAccount?.pageId || '1309863422219233';
+    const existingFbToken = SocialManagerService.getFacebookToken(project);
+
+    const ytAccount = project.socialAccounts?.find(a => a.id === 'youtube');
+    const ytChannelTitle = ytAccount?.channelTitle || ytAccount?.handle || 'chiku bd';
+    const existingYtToken = GoogleAuthService.getYouTubeToken(project);
 
     this.openModal(`
       <div class="modal-backdrop">
-        <div class="modal-card" style="max-width:580px;">
+        <div class="modal-card" style="max-width:620px;">
           <div class="modal-header">
             <h3 class="modal-title" style="display:flex; align-items:center; gap:10px;">
-              <span style="width:34px; height:34px; border-radius:var(--radius-sm); background:#1877F2; color:white; display:flex; align-items:center; justify-content:center;">
+              <span style="width:34px; height:34px; border-radius:var(--radius-sm); background:linear-gradient(135deg, #1877F2, #FF0000); color:white; display:flex; align-items:center; justify-content:center;">
                 <i data-lucide="send"></i>
               </span>
-              <span>Social Media Auto-Publishing Dispatch</span>
+              <span>Social Media Video Publishing Dispatch Hub</span>
             </h3>
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body">
-            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
+            <!-- 1. Video Attachment Status & Selector -->
+            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <div>
-                  <div style="font-weight:700; color:var(--text-primary); font-size:0.95rem;">
-                    Target Page: <span style="color:#1877F2;">${pageName}</span> (ID: <code>${pageId}</code>)
+                  <div style="font-weight:700; color:var(--text-primary); font-size:0.92rem;">
+                    ভিডিও: <span style="color:var(--primary);">${targetVideo?.title || 'Selected Video'}</span>
                   </div>
-                  <div style="font-size:0.8rem; color:var(--text-muted); margin-top:3px;">
-                    লক্ষ্য চ্যানেল: Facebook Reels, YouTube Shorts, এবং অন্যান্য কানেক্টেড প্ল্যাটফর্ম
+                  <div style="font-size:0.78rem; color:var(--text-muted); margin-top:2px;">
+                    ${targetVideo?.duration || '0:30'} &bull; ${targetVideo?.size || 'Direct MP4'}
                   </div>
                 </div>
-                <span class="badge badge-warning">Action Required</span>
+                <span id="modal-video-blob-badge" class="badge ${currentBlob ? 'badge-success' : 'badge-danger'}">
+                  ${currentBlob ? '✓ ফাইল প্রস্তুত' : '⚠ ফাইল সিলেক্ট করুন'}
+                </span>
+              </div>
+              
+              <div style="border-top:1px dashed var(--border-light); padding-top:10px; margin-top:8px;">
+                <label style="font-size:0.78rem; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">
+                  ভিডিও ফাইল (.mp4) সংযুক্ত / পরিবর্তন করুন:
+                </label>
+                <input type="file" id="modal-publish-file-input" accept="video/mp4,video/webm,video/quicktime" class="form-input" style="padding:6px; font-size:0.8rem;" />
+                <div style="font-size:0.74rem; color:var(--text-muted); margin-top:3px;">
+                  ফেসবুক এবং ইউটিউবে আসল ভিডিও ফাইল সরাসরি আপলোড করার জন্য ফাইলটি সিলেক্ট করুন।
+                </div>
               </div>
             </div>
 
-            <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:var(--radius-md); padding:12px 14px; font-size:0.84rem; margin-bottom:14px; color:var(--text-primary);">
-              <div style="font-weight:700; color:#EF4444; margin-bottom:3px; display:flex; align-items:center; gap:6px;">
-                <i data-lucide="alert-triangle" style="width:16px; height:16px;"></i>
-                <span>Facebook Access Token আপডেট প্রয়োজন</span>
+            <!-- Error / Context Banner if present -->
+            ${errorContext ? `
+              <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:var(--radius-md); padding:12px 14px; font-size:0.84rem; margin-bottom:14px; color:var(--text-primary);">
+                <div style="font-weight:700; color:#EF4444; margin-bottom:3px; display:flex; align-items:center; gap:6px;">
+                  <i data-lucide="alert-triangle" style="width:16px; height:16px;"></i>
+                  <span>আপডেট বা যাচাই প্রয়োজন</span>
+                </div>
+                <p style="font-size:0.82rem; color:var(--text-secondary); line-height:1.45; margin:0;">
+                  ${errorContext.replace(/^Publishing failed:\s*/i, '').replace(/^Facebook Error:\s*/i, '')}
+                </p>
               </div>
-              <p style="font-size:0.82rem; color:var(--text-secondary); line-height:1.45; margin:0;">
-                ${(errorContext || '').replace(/^Publishing failed:\s*/i, '').replace(/^Facebook Error:\s*/i, '') || 'Facebook Page Access Token এর মেয়াদ শেষ (Expired) বা টোকেন কনফিগার করা নেই।'}
-              </p>
+            ` : ''}
+
+            <!-- 2. Facebook Page Section -->
+            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.06), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="width:26px; height:26px; border-radius:50%; background:#1877F2; color:white; display:flex; align-items:center; justify-content:center;">
+                    <i data-lucide="facebook" style="width:15px; height:15px;"></i>
+                  </span>
+                  <div>
+                    <div style="font-weight:700; color:var(--text-primary); font-size:0.9rem;">
+                      Facebook Page: <span style="color:#1877F2;">${pageName}</span>
+                    </div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">
+                      Page ID: <code>${pageId}</code> &bull; Video Post & Reels
+                    </div>
+                  </div>
+                </div>
+                <span class="badge ${existingFbToken ? 'badge-success' : 'badge-warning'}">
+                  ${existingFbToken ? 'Token Configured' : 'Token Required'}
+                </span>
+              </div>
+
+              <div class="form-group" style="margin-bottom:0; margin-top:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                  <label style="font-size:0.78rem; font-weight:600; color:var(--text-primary); margin:0;">
+                    Facebook Access Token:
+                  </label>
+                  <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:#1877F2; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
+                    <span>Graph API Explorer</span>
+                    <i data-lucide="external-link" style="width:11px; height:11px;"></i>
+                  </a>
+                </div>
+                <textarea class="form-input" id="quick-publish-token" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical;" placeholder="নতুন Access Token দিন (EAA... বা EAAT...)">${existingFbToken || ''}</textarea>
+              </div>
             </div>
 
-            <div class="form-group" style="margin-bottom:14px;">
-              <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
-                <span><strong>নতুন Meta Graph API Token দিন (Live Post করতে):</strong></span>
-                <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" style="font-size:0.78rem; color:#1877F2; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
-                  <span>Graph API Explorer খুলুন</span>
-                  <i data-lucide="external-link" style="width:12px; height:12px;"></i>
-                </a>
-              </label>
-              <textarea class="form-input" id="quick-publish-token" rows="3" style="font-family:monospace; font-size:0.82rem; resize:vertical;" placeholder="এখানে নতুন Access Token পেস্ট করুন (EAA... বা EAAT...)"></textarea>
-              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
-                Graph API Explorer-এ আপনার Page সিলেক্ট করে <code>pages_manage_posts</code> এবং <code>publish_video</code> পারমিশন সহ Generate Token করুন।
+            <!-- 3. YouTube Shorts Section -->
+            <div style="background:linear-gradient(135deg, rgba(255, 0, 0, 0.06), rgba(255, 0, 0, 0.02)); border:1px solid rgba(255, 0, 0, 0.2); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="width:26px; height:26px; border-radius:50%; background:#FF0000; color:white; display:flex; align-items:center; justify-content:center;">
+                    <i data-lucide="youtube" style="width:15px; height:15px;"></i>
+                  </span>
+                  <div>
+                    <div style="font-weight:700; color:var(--text-primary); font-size:0.9rem;">
+                      YouTube Channel: <span style="color:#FF0000;">${ytChannelTitle}</span>
+                    </div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">
+                      YouTube Shorts &bull; Resumable Data API v3
+                    </div>
+                  </div>
+                </div>
+                <span id="modal-yt-badge" class="badge ${existingYtToken ? 'badge-success' : 'badge-warning'}">
+                  ${existingYtToken ? 'OAuth Ready' : 'Authorization Needed'}
+                </span>
+              </div>
+
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-modal-connect-google" style="flex:1; border-color:#FF0000; color:#FF0000; display:flex; align-items:center; justify-content:center; gap:6px;">
+                  <i data-lucide="play-circle"></i>
+                  <span>Google OAuth 1-Click Connect</span>
+                </button>
+              </div>
+              <div class="form-group" style="margin-bottom:0; margin-top:8px;">
+                <input type="password" class="form-input" id="quick-youtube-token" value="${existingYtToken || ''}" placeholder="অথবা Google OAuth Access Token পেস্ট করুন" style="font-family:monospace; font-size:0.8rem;" />
               </div>
             </div>
 
-            <div style="display:flex; gap:10px; margin-top:10px;">
-              <button class="btn btn-primary" id="btn-submit-token-and-publish" style="flex:1; background:#1877F2; border-color:#1877F2; display:flex; align-items:center; justify-content:center; gap:6px;">
+            <!-- Primary Action Buttons -->
+            <div style="display:flex; gap:10px; margin-top:14px;">
+              <button class="btn btn-primary" id="btn-submit-token-and-publish" style="flex:1; background:linear-gradient(135deg, #1877F2, #4F46E5); border:none; padding:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:700;">
                 <i data-lucide="rocket"></i>
-                <span>টোকেন সেভ করে সরাসরি লাইভ পোস্ট করুন</span>
+                <span>আসল ভিডিও ফাইল আপলোড করুন (Live Post)</span>
               </button>
             </div>
 
-            <div style="margin:16px 0; display:flex; align-items:center; gap:10px;">
+            <div style="margin:14px 0; display:flex; align-items:center; gap:10px;">
               <div style="flex:1; height:1px; background:var(--border-light);"></div>
               <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:700;">অথবা</span>
               <div style="flex:1; height:1px; background:var(--border-light);"></div>
@@ -2422,11 +2516,8 @@ class OmniFlowApp {
 
             <button class="btn btn-outline" id="btn-run-simulation-direct" style="width:100%; border-color:#10B981; color:#10B981; display:flex; align-items:center; justify-content:center; gap:8px;">
               <i data-lucide="play-circle"></i>
-              <span>সিমুলেশন মোডে সফল পাবলিশ সম্পন্ন করুন (Instant Test)</span>
+              <span>সিমুলেশন টেস্ট সম্পন্ন করুন (Instant Test Mode)</span>
             </button>
-            <div style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:6px;">
-              সিমুলেশন মোডে সম্পূর্ণ অটো-পাবলিশ পাইপলাইন, কনফেটি এবং লাইভ পোস্ট লিঙ্ক তৈরি হবে।
-            </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-outline btn-close-modal">বাতিল</button>
@@ -2436,35 +2527,95 @@ class OmniFlowApp {
     `);
     this.refreshIcons();
 
-    // 1. Live Post with token
+    let selectedFileBlob = currentBlob;
+    const filePicker = document.getElementById('modal-publish-file-input');
+    if (filePicker) {
+      filePicker.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          selectedFileBlob = file;
+          if (targetVideo) {
+            targetVideo.fileReference = file;
+            await saveVideoBlob(targetVideo.id, file);
+            await saveVideoBlob(targetVideo.title, file);
+          }
+          const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+          const badge = document.getElementById('modal-video-blob-badge');
+          if (badge) {
+            badge.className = 'badge badge-success';
+            badge.innerHTML = `✓ ভিডিও ফাইল প্রস্তুত (${sizeMb} MB)`;
+          }
+        }
+      });
+    }
+
+    // Google OAuth Connect
+    const googleBtn = document.getElementById('btn-modal-connect-google');
+    if (googleBtn) {
+      googleBtn.addEventListener('click', async () => {
+        try {
+          googleBtn.disabled = true;
+          googleBtn.innerText = 'Connecting Google...';
+          const res = await GoogleAuthService.connectYouTubeChannel(project);
+          if (res.accessToken) {
+            const ytInput = document.getElementById('quick-youtube-token');
+            if (ytInput) ytInput.value = res.accessToken;
+            const ytBadge = document.getElementById('modal-yt-badge');
+            if (ytBadge) {
+              ytBadge.className = 'badge badge-success';
+              ytBadge.innerText = 'Connected: ' + (res.channel?.title || 'YouTube');
+            }
+          }
+          this.showToast('YouTube Channel Authorized with Google!', 'success');
+        } catch (e) {
+          alert(`Google OAuth: ${e.message}\nআপনি চাইলে সরাসরি Google Access Token পেস্ট করতে পারেন।`);
+        } finally {
+          googleBtn.disabled = false;
+          googleBtn.innerHTML = '<i data-lucide="play-circle"></i> <span>Google OAuth 1-Click Connect</span>';
+          createIcons({ icons });
+        }
+      });
+    }
+
+    // 1. Live Post with tokens and binary video
     document.getElementById('btn-submit-token-and-publish').addEventListener('click', async () => {
-      const newToken = (document.getElementById('quick-publish-token')?.value || '').trim();
-      if (!newToken) {
-        alert('অনুগ্রহ করে একটি বৈধ Facebook Access Token পেস্ট করুন অথবা নিচের সিমুলেশন মোড ব্যবহার করুন।');
+      const fbToken = (document.getElementById('quick-publish-token')?.value || existingFbToken || '').trim();
+      const ytToken = (document.getElementById('quick-youtube-token')?.value || existingYtToken || '').trim();
+
+      if (fbToken) {
+        SocialManagerService.setFacebookToken(project, fbToken);
+      }
+      if (ytToken) {
+        GoogleAuthService.setYouTubeToken(project, ytToken);
+      }
+      storage.saveState();
+
+      if (!selectedFileBlob && !currentBlob) {
+        alert('ফেসবুক এবং ইউটিউবে আসল ভিডিও আপলোড করতে অনুগ্রহ করে ভিডিও ফাইলটি সিলেক্ট করুন (File Picker থেকে)।');
         return;
       }
 
       const btn = document.getElementById('btn-submit-token-and-publish');
       btn.disabled = true;
-      btn.innerHTML = '<span>যাচাই ও পাবলিশ হচ্ছে...</span>';
+      btn.innerHTML = '<span>আসল ভিডিও ফাইল আপলোড হচ্ছে...</span>';
 
       try {
-        SocialManagerService.setFacebookToken(project, newToken);
-        storage.saveState();
-
         this.closeModal();
-        this.showToast('টোকেন আপডেট হয়েছে! ভিডিও পাবলিশ করা হচ্ছে...', 'info');
+        this.showToast('ফেসবুক এবং ইউটিউবে ভিডিও আপলোড শুরু হচ্ছে...', 'info');
 
-        const res = await SchedulerService.publishVideo(project, targetVideoId, (p) => {
+        const res = await SchedulerService.publishVideo(project, targetVideo?.id, (p) => {
           if (p.message) this.showToast(p.message, 'info');
-        }, { token: newToken });
+        }, {
+          token: fbToken,
+          fileBlob: selectedFileBlob || currentBlob
+        });
 
         storage.saveState();
-        this.showToast(`🎉 "${res.video?.title || 'Video'}" সফলভাবে ফেসবুকে পাবলিশ হয়েছে!`, 'success');
+        this.showToast(`🎉 "${res.video?.title || 'Video'}" সফলভাবে আপলোড হয়েছে!`, 'success');
         this.render();
       } catch (err) {
         this.showToast(err.message, 'error');
-        this.openPublishTokenModal(project, targetVideoId, err.message);
+        this.openPublishTokenModal(project, targetVideo?.id, err.message);
       }
     });
 
@@ -2474,7 +2625,7 @@ class OmniFlowApp {
       this.showToast('সিমুলেশন মোডে পাবলিশ শুরু হচ্ছে...', 'info');
 
       try {
-        const res = await SchedulerService.publishVideo(project, targetVideoId, (p) => {
+        const res = await SchedulerService.publishVideo(project, targetVideo?.id, (p) => {
           if (p.message) this.showToast(p.message, 'info');
         }, { forceSimulation: true });
 

@@ -52,6 +52,35 @@ export async function getVideoBlob(id) {
   }
 }
 
+export async function findVideoBlob(keyOrTitle = '') {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.openCursor();
+      let latestBlob = null;
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          latestBlob = cursor.value;
+          const k = String(cursor.key).toLowerCase();
+          const q = String(keyOrTitle || '').toLowerCase();
+          if (q && (k.includes(q) || q.includes(k))) {
+            return resolve(cursor.value);
+          }
+          cursor.continue();
+        } else {
+          resolve(latestBlob);
+        }
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function deleteVideoBlob(id) {
   try {
     const db = await openDB();

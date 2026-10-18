@@ -1,8 +1,9 @@
 // Automated Daily Timing Scheduler & Social Publishing Engine
 import { AICaptionService } from './aiCaption.js';
 import confetti from 'canvas-confetti';
-import { getVideoBlob } from './videoStore.js';
+import { getVideoBlob, saveVideoBlob, findVideoBlob } from './videoStore.js';
 import { SocialManagerService } from './socialManager.js';
+import { GoogleAuthService } from './googleAuth.js';
 
 export class SchedulerService {
   /**
@@ -108,6 +109,65 @@ export class SchedulerService {
   /**
    * Publishes video to connected social platforms via real server-side API endpoints
    */
+  /**
+   * Resolves binary Blob for a video from memory, IndexedDB, or URL
+   */
+  static async resolveVideoBlob(video) {
+    if (!video) return null;
+    if (video.fileReference instanceof Blob) {
+      return video.fileReference;
+    }
+    try {
+      const b = await getVideoBlob(video.id);
+      if (b instanceof Blob) {
+        video.fileReference = b;
+        return b;
+      }
+    } catch (e) {
+      console.warn('[Scheduler] IndexedDB blob lookup:', e);
+    }
+
+    try {
+      const fb = await findVideoBlob(video.title || video.id);
+      if (fb instanceof Blob) {
+        video.fileReference = fb;
+        return fb;
+      }
+    } catch (e) {
+      console.warn('[Scheduler] IndexedDB findVideoBlob lookup:', e);
+    }
+
+    if (video.videoUrl && video.videoUrl.startsWith('blob:')) {
+      try {
+        const r = await fetch(video.videoUrl);
+        if (r.ok) {
+          const b = await r.blob();
+          video.fileReference = b;
+          try { await saveVideoBlob(video.id, b); } catch (e) {}
+          return b;
+        }
+      } catch (e) {
+        console.warn('[Scheduler] Blob URL fetch error:', e);
+      }
+    }
+
+    if (video.videoUrl && (video.videoUrl.startsWith('http://') || video.videoUrl.startsWith('https://'))) {
+      try {
+        const r = await fetch(video.videoUrl);
+        if (r.ok) {
+          const b = await r.blob();
+          video.fileReference = b;
+          try { await saveVideoBlob(video.id, b); } catch (e) {}
+          return b;
+        }
+      } catch (e) {
+        console.warn('[Scheduler] Remote URL fetch error:', e);
+      }
+    }
+
+    return null;
+  }
+
   static async publishVideo(project, targetVideoId = null, onProgress = () => {}, options = {}) {
     const isSimulated = !!options.forceSimulation;
 
@@ -169,34 +229,28 @@ export class SchedulerService {
     }
     await new Promise(r => setTimeout(r, 250));
 
-    // Step 3: Social Platform Media Upload
+    // Step 3: Resolve Binary Video File
+    let fileBlob = await this.resolveVideoBlob(video);
+
+    // If options.fileBlob was explicitly passed (e.g. from file picker modal)
+    if (options.fileBlob instanceof Blob) {
+      fileBlob = options.fileBlob;
+      video.fileReference = fileBlob;
+      try { await saveVideoBlob(video.id, fileBlob); } catch (e) {}
+    }
+
+    // Never attempt live video upload without the video binary!
+    if (!fileBlob && !isSimulated) {
+      throw new Error(`VIDEO_BINARY_REQUIRED: ভিডিও ফাইলটির বাইনারি ডেটা ব্রাউজার ক্যাশে পাওয়া যায়নি। ফেসবুক ও ইউটিউবে আসল ভিডিও আপলোড করতে অনুগ্রহ করে ভিডিও ফাইলটি সিলেক্ট করুন।`);
+    }
+
+    // Step 4: Social Platform Media Upload
     onProgress({ step: 3, percent: 55, message: `Broadcasting to ${platformNames.join(', ')}...` });
 
     const externalUrls = {};
     const errors = [];
 
-    // Retrieve local video file binary if available
-    let fileBlob = null;
-    if (video.fileReference instanceof Blob) {
-      fileBlob = video.fileReference;
-    }
-    if (!fileBlob) {
-      try {
-        fileBlob = await getVideoBlob(video.id);
-      } catch (e) {
-        console.warn('[Scheduler] IndexedDB blob lookup:', e);
-      }
-    }
-    if (!fileBlob && video.videoUrl && video.videoUrl.startsWith('blob:')) {
-      try {
-        const r = await fetch(video.videoUrl);
-        if (r.ok) fileBlob = await r.blob();
-      } catch (e) {
-        console.warn('[Scheduler] Blob URL fetch error:', e);
-      }
-    }
-
-    // --- 1. FACEBOOK META GRAPH API ---
+    // --- 1. FACEBOOK META GRAPH API VIDEO / REELS UPLOAD ---
     const fbAccount = activeConnectedPlatforms.find(a => a.id === 'facebook');
     if (fbAccount) {
       const pageName = fbAccount.pageName || 'Chiku bd';
@@ -209,7 +263,7 @@ export class SchedulerService {
         externalUrls['Facebook'] = `https://www.facebook.com/${targetPageId}/posts/${simPostId}`;
       } else {
         try {
-          onProgress({ step: 4, percent: 75, message: `Publishing to Facebook Page "${pageName}"...` });
+          onProgress({ step: 4, percent: 75, message: `Publishing real video to Facebook Page "${pageName}"...` });
 
           const fbToken = (options.token || fbAccount.accessToken || fbAccount.token || SocialManagerService.getFacebookToken(project) || '').trim();
 
@@ -217,97 +271,58 @@ export class SchedulerService {
             throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token পাওয়া যায়নি। অনুগ্রহ করে Social Media ট্যাবে পেজটি পুনরায় কানেক্ট করুন।');
           }
 
-          if (fileBlob) {
-            onProgress({ step: 4, percent: 80, message: `Requesting Facebook Page upload authorization...` });
+          onProgress({ step: 4, percent: 80, message: `Facebook Page ভিডিও আপলোড অনুমতি চাওয়া হচ্ছে...` });
 
-            const authRes = await fetch('/api/facebook/upload-token', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-fb-token': fbToken
-              },
-              body: JSON.stringify({
-                pageId: targetPageId,
-                token: fbToken
-              })
-            });
-            const authData = await authRes.json();
+          const authRes = await fetch('/api/facebook/upload-token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-fb-token': fbToken
+            },
+            body: JSON.stringify({
+              pageId: targetPageId,
+              token: fbToken
+            })
+          });
+          const authData = await authRes.json();
 
-            if (!authRes.ok || !authData.success || !authData.token) {
-              const err = authData.error || 'Failed to acquire Facebook Page upload authorization.';
-              if (err.includes('expired') || err.includes('190') || err.includes('missing')) {
-                throw new Error(`FACEBOOK_TOKEN_EXPIRED: ${err}`);
-              }
-              throw new Error(err);
+          if (!authRes.ok || !authData.success || !authData.token) {
+            const err = authData.error || 'Failed to acquire Facebook Page upload authorization.';
+            if (err.includes('expired') || err.includes('190') || err.includes('missing')) {
+              throw new Error(`FACEBOOK_TOKEN_EXPIRED: ${err}`);
             }
+            throw new Error(err);
+          }
 
-            const pageToken = authData.token;
-            const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
-            onProgress({ step: 4, percent: 85, message: `Uploading video (${sizeMb} MB) directly to Facebook Page...` });
+          const pageToken = authData.token;
+          const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
+          onProgress({ step: 4, percent: 84, message: `ফেসবুক পেজে আসল ভিডিও আপলোড হচ্ছে (${sizeMb} MB)...` });
 
-            const formData = new FormData();
-            formData.append('access_token', pageToken);
-            formData.append('description', video.caption || video.title || '');
-            if (video.title) formData.append('title', video.title);
-            formData.append('source', fileBlob, video.title || 'video.mp4');
+          const formData = new FormData();
+          formData.append('title', video.title || '');
+          formData.append('description', video.caption || video.title || '');
+          formData.append('source', fileBlob, video.title || 'video.mp4');
 
-            const metaRes = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(targetPageId)}/videos`, {
-              method: 'POST',
-              body: formData
-            });
+          const uploadRes = await fetch(`/api/facebook/upload-video?pageId=${encodeURIComponent(targetPageId)}&token=${encodeURIComponent(pageToken)}`, {
+            method: 'POST',
+            body: formData
+          });
 
-            const metaData = await metaRes.json();
+          const uploadData = await uploadRes.json();
 
-            if (metaRes.ok && metaData.id) {
-              const postUrl = `https://www.facebook.com/${metaData.id}`;
-              externalUrls['Facebook'] = postUrl;
-              console.log('[Scheduler] Direct Facebook video upload success:', postUrl);
-            } else {
-              const metaErr = metaData.error || {};
-              let errMsg = metaErr.message || 'Meta video upload failed';
-              if (metaErr.code === 190) {
-                throw new Error(`FACEBOOK_TOKEN_EXPIRED: Facebook Page token expired (Code 190). Please update token.`);
-              } else if (metaErr.code === 100 && metaErr.error_subcode === 33) {
-                errMsg = `Facebook Page ID ${targetPageId} not found or unsupported.`;
-              } else if (metaErr.code === 200) {
-                errMsg = 'Missing permissions: pages_manage_posts or publish_video required.';
-              }
-              errors.push(`Facebook: ${errMsg}`);
-            }
+          if (uploadRes.ok && uploadData.success && uploadData.videoId) {
+            const postUrl = uploadData.postUrl || `https://www.facebook.com/${targetPageId}/videos/${uploadData.videoId}`;
+            externalUrls['Facebook'] = postUrl;
+            console.log('[Scheduler] Direct Facebook video upload success:', postUrl);
           } else {
-            // Remote URL (Google Drive, cloud video, etc.) via backend publisher
-            const directVideoUrl = video.videoUrl || video.downloadUrl || video.url || '';
-
-            const fbRes = await fetch('/api/facebook/publish', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-fb-token': fbToken
-              },
-              body: JSON.stringify({
-                pageId: targetPageId,
-                caption: video.caption,
-                videoUrl: directVideoUrl,
-                token: fbToken,
-                idempotencyKey: video.idempotencyKey || `pub_${video.id}_${Date.now()}`,
-                itemId: video.id
-              })
-            });
-
-            const fbData = await fbRes.json();
-
-            if (fbRes.ok && fbData.success) {
-              externalUrls['Facebook'] = fbData.postUrl;
-            } else {
-              const errDetail = fbData.message || fbData.error || 'Failed to post to Facebook';
-              if (errDetail.includes('190') || errDetail.includes('expired') || errDetail.includes('Token missing') || errDetail.includes('টোকেন')) {
-                throw new Error(`FACEBOOK_TOKEN_EXPIRED: ${errDetail}`);
-              }
-              errors.push(`Facebook: ${errDetail}`);
+            const errMsg = uploadData.message || uploadData.error || 'Meta video upload failed';
+            if (uploadData.error === 'FACEBOOK_TOKEN_EXPIRED' || uploadData.code === 190) {
+              throw new Error(`FACEBOOK_TOKEN_EXPIRED: Facebook Page token expired (Code 190). Please update token.`);
             }
+            throw new Error(`Facebook Video Upload Failed: ${errMsg}`);
           }
         } catch (err) {
-          if (err.message && (err.message.includes('FACEBOOK_TOKEN_REQUIRED') || err.message.includes('FACEBOOK_TOKEN_EXPIRED'))) {
+          if (err.message && (err.message.includes('FACEBOOK_TOKEN_REQUIRED') || err.message.includes('FACEBOOK_TOKEN_EXPIRED') || err.message.includes('VIDEO_BINARY_REQUIRED'))) {
             throw err;
           }
           errors.push(`Facebook: ${err.message}`);
@@ -315,13 +330,42 @@ export class SchedulerService {
       }
     }
 
-    // --- 2. YOUTUBE SHORTS ---
+    // --- 2. YOUTUBE SHORTS UPLOAD (DATA API V3) ---
     const ytAccount = activeConnectedPlatforms.find(a => a.id === 'youtube');
     if (ytAccount) {
-      onProgress({ step: 4, percent: 88, message: `Publishing to YouTube Shorts ("${ytAccount.handle || 'Channel'}")...` });
-      await new Promise(r => setTimeout(r, 200));
-      const ytId = video.id ? video.id.substring(0, 11) : Math.random().toString(36).substring(2, 13);
-      externalUrls['YouTube Shorts'] = `https://www.youtube.com/shorts/${ytId}`;
+      if (isSimulated) {
+        onProgress({ step: 4, percent: 88, message: `Publishing to YouTube Shorts (Simulation Mode)...` });
+        await new Promise(r => setTimeout(r, 200));
+        const ytId = video.id ? video.id.substring(0, 11) : Math.random().toString(36).substring(2, 13);
+        externalUrls['YouTube Shorts'] = `https://www.youtube.com/shorts/${ytId}`;
+      } else {
+        const ytToken = GoogleAuthService.getYouTubeToken(project);
+        if (!ytToken) {
+          throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube চ্যানেল কানেক্ট করা নেই বা Google Access Token পাওয়া যায়নি। অনুগ্রহ করে YouTube কানেক্ট করুন।');
+        }
+
+        const channelLabel = ytAccount.channelTitle || ytAccount.handle || 'Channel';
+        const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
+        onProgress({ step: 4, percent: 88, message: `YouTube Shorts-এ আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে (${channelLabel})...` });
+
+        try {
+          const ytResult = await GoogleAuthService.uploadShortVideo(
+            fileBlob,
+            {
+              title: video.title,
+              description: video.caption
+            },
+            ytToken
+          );
+          externalUrls['YouTube Shorts'] = ytResult.postUrl;
+          console.log('[Scheduler] YouTube Shorts Upload Success:', ytResult.postUrl);
+        } catch (ytErr) {
+          if (ytErr.message && (ytErr.message.includes('YOUTUBE_TOKEN_REQUIRED') || ytErr.message.includes('YOUTUBE_TOKEN_EXPIRED') || ytErr.message.includes('VIDEO_BLOB_REQUIRED'))) {
+            throw ytErr;
+          }
+          errors.push(`YouTube: ${ytErr.message}`);
+        }
+      }
     }
 
     // --- 3. INSTAGRAM REELS ---

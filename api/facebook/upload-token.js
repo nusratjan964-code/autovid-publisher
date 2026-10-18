@@ -27,9 +27,22 @@ export default async function handler(req, res) {
     });
   }
 
+  let effectiveToken = token;
+
+  // Verify and resolve Page Access Token if a User Token was provided
+  try {
+    const pageCheckRes = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(pageId)}?fields=access_token&access_token=${encodeURIComponent(token)}`);
+    const pageCheckData = await pageCheckRes.json();
+    if (pageCheckRes.ok && pageCheckData.access_token) {
+      effectiveToken = pageCheckData.access_token;
+    }
+  } catch (e) {
+    console.warn('[UploadToken] Page token auto-resolution notice:', e.message);
+  }
+
   return res.status(200).json({
     success: true,
     pageId,
-    token
+    token: effectiveToken
   });
 }

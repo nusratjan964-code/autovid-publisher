@@ -112,7 +112,13 @@ export default async function handler(req, res) {
     } else if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
       effectiveType = 'photo';
     } else {
-      effectiveType = 'text';
+      // If no valid media URL was passed, do not silently convert a video item into a text-only feed post!
+      return res.status(400).json({
+        success: false,
+        status: 'Failed',
+        error: 'Video file binary or direct media URL required',
+        message: 'ভিডিও ফাইলটি পাওয়া যায়নি। ফেসবুক ও ইউটিউবে ভিডিও আপলোড করতে অনুগ্রহ করে ভিডিও ফাইলটি সিলেক্ট করে আপলোড করুন।'
+      });
     }
   }
 

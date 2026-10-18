@@ -18,7 +18,11 @@ function apiDevServerPlugin() {
         try {
           let handlerModule = null;
 
-          if (pathname === '/api/facebook/pages') {
+          if (pathname === '/api/facebook/upload-video') {
+            handlerModule = await import('./api/facebook/upload-video.js');
+          } else if (pathname === '/api/youtube/upload-video') {
+            handlerModule = await import('./api/youtube/upload-video.js');
+          } else if (pathname === '/api/facebook/pages') {
             handlerModule = await import('./api/facebook/pages.js');
           } else if (pathname === '/api/facebook/select-page') {
             handlerModule = await import('./api/facebook/select-page.js');
@@ -35,8 +39,25 @@ function apiDevServerPlugin() {
           }
 
           if (handlerModule && handlerModule.default) {
-            // Parse body if POST/PUT
-            if (req.method === 'POST' || req.method === 'PUT') {
+            req.query = Object.fromEntries(url.searchParams.entries());
+            res.status = (code) => {
+              res.statusCode = code;
+              return res;
+            };
+            res.json = (data) => {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(data));
+            };
+
+            if (pathname.includes('/upload-video')) {
+              // Binary buffer accumulation for video files
+              const chunks = [];
+              req.on('data', chunk => { chunks.push(chunk); });
+              req.on('end', async () => {
+                req.rawBuffer = Buffer.concat(chunks);
+                await handlerModule.default(req, res);
+              });
+            } else if (req.method === 'POST' || req.method === 'PUT') {
               let body = '';
               req.on('data', chunk => { body += chunk; });
               req.on('end', async () => {
@@ -45,30 +66,9 @@ function apiDevServerPlugin() {
                 } catch (e) {
                   req.body = {};
                 }
-
-                // Add express-like helpers for serverless handler compatibility
-                res.status = (code) => {
-                  res.statusCode = code;
-                  return res;
-                };
-                res.json = (data) => {
-                  res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify(data));
-                };
-
                 await handlerModule.default(req, res);
               });
             } else {
-              req.query = Object.fromEntries(url.searchParams.entries());
-              res.status = (code) => {
-                res.statusCode = code;
-                return res;
-              };
-              res.json = (data) => {
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify(data));
-              };
-
               await handlerModule.default(req, res);
             }
             return;

@@ -7,7 +7,7 @@ export class GoogleAuthService {
   static getClientId() {
     return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
            (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
-           '';
+           '489789622156-nokptei8ilkral58vf8vqopsbe1hf6u5.apps.googleusercontent.com';
   }
 
   static setClientId(id) {
@@ -217,6 +217,151 @@ export class GoogleAuthService {
       avatar: snippet.thumbnails?.default?.url || snippet.thumbnails?.medium?.url || '',
       subscribersFormatted: formattedSubs,
       videoCount: stats.videoCount || 0
+    };
+  }
+
+  /**
+   * Retrieves active YouTube Access Token from state or localStorage
+   */
+  static getYouTubeToken(project) {
+    const account = project?.socialAccounts?.find(a => a.id === 'youtube');
+    return account?.accessToken || account?.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '') || '';
+  }
+
+  /**
+   * Stores active YouTube Access Token across project and localStorage
+   */
+  static setYouTubeToken(project, token) {
+    if (!token) return;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('omni_google_access_token', token.trim());
+      }
+    } catch (e) {}
+
+    const account = project?.socialAccounts?.find(a => a.id === 'youtube');
+    if (account) {
+      account.accessToken = token.trim();
+      account.token = token.trim();
+      account.connected = true;
+      account.active = true;
+    }
+  }
+
+  /**
+   * Uploads short video directly to YouTube Data API v3
+   */
+  static async uploadShortVideo(fileBlob, { title, description = '', tags = [] }, accessToken) {
+    if (!accessToken) {
+      throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token missing. Please connect YouTube with Google.');
+    }
+    if (!fileBlob || !(fileBlob instanceof Blob)) {
+      throw new Error('VIDEO_BLOB_REQUIRED: Video binary file is required to upload to YouTube Shorts.');
+    }
+
+    // Attempt 1: Server-side relay (bypasses browser CORS and origin limitations)
+    try {
+      const relayUrl = `/api/youtube/upload-video?title=${encodeURIComponent(title || '')}&description=${encodeURIComponent(description || '')}&token=${encodeURIComponent(accessToken)}`;
+      const relayRes = await fetch(relayUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': fileBlob.type || 'video/mp4'
+        },
+        body: fileBlob
+      });
+
+      const relayData = await relayRes.json();
+      if (relayRes.ok && relayData.success && relayData.videoId) {
+        return {
+          success: true,
+          videoId: relayData.videoId,
+          postUrl: relayData.postUrl || `https://www.youtube.com/shorts/${relayData.videoId}`
+        };
+      }
+
+      if (relayData.error === 'YOUTUBE_TOKEN_EXPIRED' || relayRes.status === 401) {
+        throw new Error('YOUTUBE_TOKEN_EXPIRED: YouTube Access Token expired. Please reconnect YouTube Channel.');
+      }
+      if (relayData.error === 'YOUTUBE_TOKEN_REQUIRED') {
+        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token missing.');
+      }
+      console.warn('[GoogleAuth] Server relay message:', relayData.message || relayData.error);
+    } catch (relayErr) {
+      if (relayErr.message && (relayErr.message.includes('YOUTUBE_TOKEN') || relayErr.message.includes('VIDEO_BLOB'))) {
+        throw relayErr;
+      }
+      console.warn('[GoogleAuth] Server relay failed, trying direct browser upload:', relayErr.message);
+    }
+
+    // Attempt 2: Direct browser client Resumable Upload
+    const metadata = {
+      snippet: {
+        title: (title || 'YouTube Short').substring(0, 100),
+        description: `${description || ''}\n\n#Shorts #Viral #Trending`,
+        tags: tags && tags.length > 0 ? tags : ['Shorts', 'Viral', 'YouTubeShorts'],
+        categoryId: '22' // People & Blogs
+      },
+      status: {
+        privacyStatus: 'public',
+        selfDeclaredMadeForKids: false
+      }
+    };
+
+    // 1. Resumable Upload Initiation
+    const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Length': fileBlob.size.toString(),
+        'X-Upload-Content-Type': fileBlob.type || 'video/mp4'
+      },
+      body: JSON.stringify(metadata)
+    });
+
+    if (!initRes.ok) {
+      let errMsg = `YouTube upload initiation failed (HTTP ${initRes.status})`;
+      try {
+        const errJson = await initRes.json();
+        if (errJson.error?.message) errMsg = errJson.error.message;
+        if (initRes.status === 401) {
+          throw new Error('YOUTUBE_TOKEN_EXPIRED: YouTube Access Token expired. Please reconnect YouTube Channel.');
+        }
+      } catch (e) {
+        if (e.message && e.message.includes('YOUTUBE_TOKEN')) throw e;
+      }
+      throw new Error(errMsg);
+    }
+
+    const uploadUrl = initRes.headers.get('Location');
+    if (!uploadUrl) {
+      throw new Error('YouTube did not return a valid upload location URI.');
+    }
+
+    // 2. Upload binary payload
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': fileBlob.type || 'video/mp4'
+      },
+      body: fileBlob
+    });
+
+    if (!uploadRes.ok) {
+      let errDetail = `YouTube video upload failed (HTTP ${uploadRes.status})`;
+      try {
+        const errJson = await uploadRes.json();
+        if (errJson.error?.message) errDetail = errJson.error.message;
+      } catch (e) {}
+      throw new Error(errDetail);
+    }
+
+    const videoData = await uploadRes.json();
+    const videoId = videoData.id;
+    return {
+      success: true,
+      videoId,
+      postUrl: `https://www.youtube.com/shorts/${videoId}`
     };
   }
 }
