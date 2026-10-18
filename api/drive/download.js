@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { Buffer } from 'node:buffer';
 
 const CREDENTIALS_FILE = path.join(process.cwd(), '.credentials_cache.json');
 
