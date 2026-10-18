@@ -2502,26 +2502,33 @@ class OmniFlowApp {
       if (alertContainer) {
         const folderUrl = scanResult.folderUrl || url;
         const openDriveBtn = (folderUrl && folderUrl.includes('drive.google.com')) ? `
-          <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
-            <a href="${folderUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="background:#4285F4; border-color:#4285F4; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+          <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center;">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-auth-and-autoscan" style="background:#4285F4; border-color:#4285F4; display:inline-flex; align-items:center; gap:6px; font-weight:700;">
+              <i data-lucide="key"></i>
+              <span>Google একাউন্ট কানেক্ট করে অটো-স্ক্যান করুন (1-Click Connect & Scan)</span>
+            </button>
+            <a href="${folderUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
               <i data-lucide="external-link"></i>
-              <span>Google Drive-এ এই ফোল্ডারটি ওপেন করুন (Open in Drive)</span>
+              <span>Google Drive-এ ফোল্ডার খুলুন (Open in Drive)</span>
             </a>
             <button type="button" class="btn btn-outline btn-sm" id="btn-drive-retry-action" style="display:inline-flex; align-items:center; gap:6px;">
               <i data-lucide="refresh-cw"></i>
-              <span>পারমিশন পরিবর্তন করে পুনরায় স্ক্যান করুন (Retry Scan)</span>
+              <span>পুনরায় স্ক্যান করুন (Retry Scan)</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-pick-folder-action" style="display:inline-flex; align-items:center; gap:6px;">
+              <i data-lucide="folder"></i>
+              <span>কম্পিউটার / Drive Desktop থেকে ফোল্ডার সিলেক্ট করুন</span>
             </button>
           </div>
         ` : '';
 
         const solutionsHtml = `
           <div style="background: rgba(239, 68, 68, 0.08); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px 14px; margin-top: 10px;">
-            <div style="font-size: 13px; font-weight: 700; color: #ef4444; margin-bottom: 6px;">💡 কীভাবে ফোল্ডারের এক্সেস পরিবর্তন করবেন (Easy 3 Steps):</div>
+            <div style="font-size: 13px; font-weight: 700; color: #ef4444; margin-bottom: 6px;">💡 পুরো ফোল্ডারটি সহজে লোড করার ৩টি উপায়:</div>
             <ol style="margin: 0; padding-left: 20px; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary);">
-              <li>নিচের <strong>"Open in Drive"</strong> বাটনে ক্লিক করে Google Drive ফোল্ডারে যান।</li>
-              <li>ফোল্ডারের টাইটেলে রাইট ক্লিক করে <strong>Share (শেয়ার)</strong> অপশন সিলেক্ট করুন।</li>
-              <li><strong>General access</strong> এ "Restricted" পরিবর্তন করে <strong>"Anyone with the link" (যে কেউ লিংকের মাধ্যমে দেখতে পাবে)</strong> সিলেক্ট করে Done চাপুন।</li>
-              <li>এরপর নিচের <strong>"Retry Scan"</strong> বাটনে চাপলেই সব ভিডিও নিমেষেই লোড হয়ে যাবে!</li>
+              <li><strong>উপায় ১ (সবচেয়ে সহজ - ১ ক্লিক):</strong> নিচের নীল বাটনে চাপ দিয়ে Google একাউন্ট কানেক্ট করুন, স্বয়ংক্রিয়ভাবে ফোল্ডারের সব ভিডিও লোড হয়ে যাবে।</li>
+              <li><strong>উপায় ২ (পারমিশন পরিবর্তন):</strong> "Open in Drive" বাটনে চাপ দিয়ে ফোল্ডারে যান ➔ Share অপশনে <strong>General access</strong> এ <strong>"Anyone with the link"</strong> করে Done চাপুন ➔ এরপর "Retry Scan" বাটনে চাপুন।</li>
+              <li><strong>উপায় ৩ (কম্পিউটার থেকে):</strong> "কম্পিউটার / Drive Desktop থেকে ফোল্ডার সিলেক্ট করুন" বাটনে ক্লিক করে আপনার পিসি বা গুগল ড্রাইভ ফোল্ডার সিলেক্ট করুন।</li>
             </ol>
             ${openDriveBtn}
           </div>
@@ -2541,9 +2548,36 @@ class OmniFlowApp {
         `;
         createIcons({ icons });
 
+        const authScanBtn = document.getElementById('btn-auth-and-autoscan');
+        if (authScanBtn) {
+          authScanBtn.addEventListener('click', async () => {
+            try {
+              authScanBtn.disabled = true;
+              authScanBtn.innerHTML = '<i data-lucide="refresh-cw" class="spin"></i> Connecting Google...';
+              createIcons({ icons });
+              await GoogleAuthService.connectYouTubeChannel(project);
+              this.showToast('Google Connected! Scanning Drive folder...', 'success');
+              await this.syncDriveFromCurrentInput(url);
+            } catch (authErr) {
+              this.showToast(authErr.message, 'warning');
+              authScanBtn.disabled = false;
+              authScanBtn.innerHTML = '<i data-lucide="key"></i> <span>Google একাউন্ট কানেক্ট করে অটো-স্ক্যান করুন</span>';
+              createIcons({ icons });
+            }
+          });
+        }
+
         const retryBtn = document.getElementById('btn-drive-retry-action');
         if (retryBtn) {
           retryBtn.addEventListener('click', () => this.syncDriveFromCurrentInput(url));
+        }
+
+        const pickFolderAction = document.getElementById('btn-pick-folder-action');
+        if (pickFolderAction) {
+          pickFolderAction.addEventListener('click', () => {
+            const folderInput = document.getElementById('file-input-folder');
+            if (folderInput) folderInput.click();
+          });
         }
       }
       this.showToast(scanResult.error === 'ACCESS_RESTRICTED' ? 'Google Drive Access Restricted' : (scanResult.message || 'Drive Scan Error'), 'error');

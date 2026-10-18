@@ -216,7 +216,31 @@ export default async function handler(req, res) {
       const apiRes = await fetch(driveApiUrl, { headers });
       if (apiRes.ok) {
         const data = await apiRes.json();
-        const files = data.files || [];
+        let files = data.files || [];
+
+        // If direct folder has no video files, check subfolders (up to 1 level deeper)
+        if (files.length === 0) {
+          try {
+            const subQ = encodeURIComponent(`'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+            const subRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subQ}&fields=files(id,name)${keyParam}`, { headers });
+            if (subRes.ok) {
+              const subData = await subRes.json();
+              const subfolders = subData.files || [];
+              for (const sub of subfolders) {
+                const subVideoQ = encodeURIComponent(`'${sub.id}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.webm') and trashed = false`);
+                const subVideoRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${subVideoQ}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}`, { headers });
+                if (subVideoRes.ok) {
+                  const svd = await subVideoRes.json();
+                  if (svd.files && svd.files.length > 0) {
+                    files.push(...svd.files);
+                  }
+                }
+              }
+            }
+          } catch (subErr) {
+            console.warn('[Drive Scanner] Subfolder check note:', subErr.message);
+          }
+        }
 
         if (files.length > 0) {
           const folderVideos = files.map(file => {
@@ -255,12 +279,21 @@ export default async function handler(req, res) {
             success: false,
             error: 'EMPTY_FOLDER',
             folderUrl: folderShareUrl,
-            message: 'এই Google Drive ফোল্ডারে কোনো ভিডিও ফাইল (.mp4, .mov, .webm) পাওয়া যায়নি। অনুগ্রহ করে নিশ্চিত করুন ফোল্ডারে ভিডিও ফাইল রয়েছে।'
+            message: 'এই Google Drive ফোল্ডারে কোনো ভিডিও ফাইল (.mp4, .mov, .webm, .mkv) পাওয়া যায়নি। নিশ্চিত করুন ফোল্ডারে ভিডিও রয়েছে।'
           });
         }
       } else {
         const errJson = await apiRes.json().catch(() => ({}));
         console.warn('[Drive Scanner] API v3 non-ok status:', apiRes.status, errJson);
+        if (apiRes.status === 401) {
+          return res.status(401).json({
+            success: false,
+            error: 'GOOGLE_TOKEN_EXPIRED',
+            folderId,
+            folderUrl: folderShareUrl,
+            message: 'আপনার Google একাউন্টের লগইন সেশন বা টোকেনটির মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে "Connect Google Drive" দিয়ে আবার লগইন করুন অথবা ফোল্ডারটি "Anyone with the link" করে দিন।'
+          });
+        }
       }
     } catch (apiErr) {
       console.warn('[Drive Scanner] API v3 error:', apiErr.message);
