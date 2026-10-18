@@ -1,6 +1,7 @@
 // Automated Daily Timing Scheduler & Social Publishing Engine
 import { AICaptionService } from './aiCaption.js';
 import confetti from 'canvas-confetti';
+import { getVideoBlob } from './videoStore.js';
 
 export class SchedulerService {
   /**
@@ -51,7 +52,7 @@ export class SchedulerService {
         id: video.id,
         title: video.title,
         caption: video.caption,
-        videoUrl: video.downloadUrl || video.url || '',
+        videoUrl: video.videoUrl || video.downloadUrl || video.url || '',
         scheduledDate: video.scheduledDate,
         platforms: video.platforms,
         idempotencyKey: video.idempotencyKey,
@@ -107,43 +108,63 @@ export class SchedulerService {
    * Publishes video to connected social platforms via real server-side API endpoints
    */
   static async publishVideo(project, targetVideoId = null, onProgress = () => {}) {
-    // Select video: target or next scheduled or ready video
+    // Select video: target or next unposted video
     let video = null;
     if (targetVideoId) {
       video = project.videos.find(v => v.id === targetVideoId);
-    } else {
-      video = project.videos.find(v => v.status === 'Pending' || v.status === 'scheduled') || project.videos.find(v => v.status === 'ready');
+    }
+    if (!video) {
+      // 1. Try scheduled or pending videos (case-insensitive)
+      video = project.videos.find(v => {
+        const s = (v.status || '').toLowerCase();
+        return s === 'pending' || s === 'scheduled';
+      });
+    }
+    if (!video) {
+      // 2. Try ready or draft videos (case-insensitive)
+      video = project.videos.find(v => {
+        const s = (v.status || '').toLowerCase();
+        return s === 'ready' || s === 'draft';
+      });
+    }
+    if (!video) {
+      // 3. Try any unposted/failed video to allow retry
+      video = project.videos.find(v => (v.status || '').toLowerCase() !== 'published');
+    }
+    if (!video && project.videos.length > 0) {
+      // 4. Fallback to first video in list
+      video = project.videos[0];
     }
 
     if (!video) {
-      throw new Error('No videos available in queue to publish.');
+      throw new Error('No videos found in your project library. Please import a video first.');
     }
 
     // Determine target platforms
-    const activeConnectedPlatforms = project.socialAccounts
+    const activeConnectedPlatforms = (project.socialAccounts || [])
       .filter(a => a.connected && a.active);
 
     if (activeConnectedPlatforms.length === 0) {
-      throw new Error('No social media channels are currently connected and active. Please configure Facebook Page or other channels in Social Media tab.');
+      throw new Error('No social media channels are currently connected and active. Please configure Facebook Page in the Social Media tab.');
     }
 
     const platformNames = activeConnectedPlatforms.map(a => a.name);
 
     // Step 1: Initialize
     video.status = 'Processing';
-    onProgress({ step: 1, percent: 15, message: `Preparing "${video.title.substring(0, 30)}..." for daily dispatch` });
-    await new Promise(r => setTimeout(r, 400));
+    onProgress({ step: 1, percent: 15, message: `Preparing "${video.title.substring(0, 30)}..." for dispatch` });
+    await new Promise(r => setTimeout(r, 300));
 
     // Step 2: Ensure AI Caption is loaded
     if (!video.caption || video.caption.trim().length === 0) {
-      onProgress({ step: 2, percent: 35, message: 'AI generating viral caption & hashtags via API...' });
+      onProgress({ step: 2, percent: 35, message: 'AI generating viral caption & hashtags...' });
       const aiResult = await AICaptionService.generateCaption(video, project.aiSettings, project.niche);
       video.caption = aiResult.caption;
       video.hook = aiResult.hook;
     } else {
-      onProgress({ step: 2, percent: 35, message: 'Attaching verified AI caption & hashtags...' });
+      onProgress({ step: 2, percent: 35, message: 'Attaching AI caption & hashtags...' });
     }
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 300));
 
     // Step 3: Social Platform Media Upload
     onProgress({ step: 3, percent: 60, message: `Broadcasting to ${platformNames.join(', ')}...` });
@@ -155,30 +176,108 @@ export class SchedulerService {
     // Real Facebook Meta Graph API Publishing
     if (fbAccount) {
       try {
-        onProgress({ step: 4, percent: 80, message: `Publishing to Facebook Page "${fbAccount.pageName || 'Chiku bd'}" (ID: ${fbAccount.pageId || 'Active'})...` });
-        
-        const fbRes = await fetch('/api/facebook/publish', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pageId: fbAccount.pageId || null,
-            caption: video.caption,
-            videoUrl: video.downloadUrl || video.url || '',
-            idempotencyKey: video.idempotencyKey || `pub_${video.id}_${Date.now()}`,
-            itemId: video.id
-          })
-        });
+        const pageName = fbAccount.pageName || 'Chiku bd';
+        onProgress({ step: 4, percent: 75, message: `Publishing to Facebook Page "${pageName}"...` });
 
-        const fbData = await fbRes.json();
+        // Retrieve local video file binary if available
+        let fileBlob = null;
+        if (video.fileReference instanceof Blob) {
+          fileBlob = video.fileReference;
+        }
+        if (!fileBlob) {
+          try {
+            fileBlob = await getVideoBlob(video.id);
+          } catch (e) {
+            console.warn('[Scheduler] IndexedDB blob lookup:', e);
+          }
+        }
+        if (!fileBlob && video.videoUrl && video.videoUrl.startsWith('blob:')) {
+          try {
+            const r = await fetch(video.videoUrl);
+            if (r.ok) fileBlob = await r.blob();
+          } catch (e) {
+            console.warn('[Scheduler] Blob URL fetch error:', e);
+          }
+        }
 
-        if (fbRes.ok && fbData.success) {
-          externalUrls['Facebook'] = fbData.postUrl;
+        if (fileBlob) {
+          // Direct binary multipart upload from browser to Meta Graph API
+          // Bypasses Vercel serverless 4.5MB request limit
+          onProgress({ step: 4, percent: 80, message: `Requesting Facebook Page upload authorization...` });
+
+          const authRes = await fetch('/api/facebook/upload-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pageId: fbAccount.pageId || null })
+          });
+          const authData = await authRes.json();
+
+          if (!authRes.ok || !authData.success || !authData.token) {
+            throw new Error(authData.error || 'Failed to acquire Facebook Page upload authorization.');
+          }
+
+          const targetPageId = authData.pageId;
+          const pageToken = authData.token;
+
+          const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
+          onProgress({ step: 4, percent: 85, message: `Uploading video (${sizeMb} MB) directly to Facebook Page...` });
+
+          const formData = new FormData();
+          formData.append('access_token', pageToken);
+          formData.append('description', video.caption || video.title || '');
+          if (video.title) formData.append('title', video.title);
+          formData.append('source', fileBlob, video.title || 'video.mp4');
+
+          const metaRes = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(targetPageId)}/videos`, {
+            method: 'POST',
+            body: formData
+          });
+
+          const metaData = await metaRes.json();
+
+          if (metaRes.ok && metaData.id) {
+            const postUrl = `https://www.facebook.com/${metaData.id}`;
+            externalUrls['Facebook'] = postUrl;
+            console.log('[Scheduler] Direct Facebook video upload success:', postUrl);
+          } else {
+            const metaErr = metaData.error || {};
+            let errMsg = metaErr.message || 'Meta video upload failed';
+            if (metaErr.code === 190) errMsg = 'Facebook Page token expired (Code 190). Please reconnect in Social Media tab.';
+            else if (metaErr.code === 100 && metaErr.error_subcode === 33) errMsg = `Facebook Page ID ${targetPageId} not found or unsupported.`;
+            else if (metaErr.code === 200) errMsg = 'Missing permissions: pages_manage_posts or publish_video required.';
+            errors.push(`Facebook: ${errMsg}`);
+          }
         } else {
-          const errDetail = fbData.message || fbData.error || 'Failed to post to Facebook';
-          errors.push(`Facebook: ${errDetail}`);
+          // Remote URL (Google Drive, cloud video, etc.) via backend publisher
+          const directVideoUrl = video.videoUrl || video.downloadUrl || video.url || '';
+          
+          if (directVideoUrl.startsWith('blob:')) {
+            throw new Error('Local video file cache expired. Please click "Play" or re-add the video file to publish.');
+          }
+
+          const fbRes = await fetch('/api/facebook/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pageId: fbAccount.pageId || null,
+              caption: video.caption,
+              videoUrl: directVideoUrl,
+              idempotencyKey: video.idempotencyKey || `pub_${video.id}_${Date.now()}`,
+              itemId: video.id
+            })
+          });
+
+          const fbData = await fbRes.json();
+
+          if (fbRes.ok && fbData.success) {
+            externalUrls['Facebook'] = fbData.postUrl;
+          } else {
+            const errDetail = fbData.message || fbData.error || 'Failed to post to Facebook';
+            errors.push(`Facebook: ${errDetail}`);
+          }
         }
       } catch (err) {
-        errors.push(`Facebook Network Error: ${err.message}`);
+        errors.push(`Facebook Error: ${err.message}`);
       }
     }
 

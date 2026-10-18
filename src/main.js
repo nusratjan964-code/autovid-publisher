@@ -6,6 +6,7 @@ import { SocialManagerService, AVAILABLE_PLATFORMS } from './services/socialMana
 import { AICaptionService } from './services/aiCaption.js';
 import { SchedulerService } from './services/scheduler.js';
 import { GoogleAuthService } from './services/googleAuth.js';
+import { getVideoBlob } from './services/videoStore.js';
 
 class OmniFlowApp {
   constructor() {
@@ -706,6 +707,10 @@ class OmniFlowApp {
           </div>
 
           <div class="video-actions">
+            <button class="btn btn-primary btn-sm btn-publish-single-video" data-video-id="${video.id}" title="Publish to Facebook Page now" style="background: linear-gradient(135deg, #1877F2 0%, #0C63D4 100%); border:none; color:#fff; font-weight:600; padding:6px 12px; gap:6px;">
+              <i data-lucide="send"></i>
+              <span>Publish Now</span>
+            </button>
             <button class="btn btn-outline btn-sm btn-generate-single-caption" data-video-id="${video.id}" title="Generate AI caption">
               <i data-lucide="sparkles"></i>
               <span>AI Caption</span>
@@ -1783,10 +1788,23 @@ class OmniFlowApp {
   }
 
   // --- VIDEO PLAYER MODAL ---
-  openVideoPlayerModal(videoId) {
+  async openVideoPlayerModal(videoId) {
     const project = storage.getActiveProject();
     const video = project.videos.find(v => v.id === videoId);
     if (!video) return;
+
+    let playableUrl = video.videoUrl || video.downloadUrl || video.url || '';
+    if (video.source === 'Local Upload' || (playableUrl && playableUrl.startsWith('blob:'))) {
+      try {
+        const dbBlob = await getVideoBlob(videoId);
+        if (dbBlob) {
+          playableUrl = URL.createObjectURL(dbBlob);
+          video.videoUrl = playableUrl;
+        }
+      } catch (e) {
+        console.warn('Could not restore blob from IndexedDB:', e);
+      }
+    }
 
     this.openModal(`
       <div class="modal-backdrop">
@@ -1801,7 +1819,7 @@ class OmniFlowApp {
             <div style="display:grid; grid-template-columns: 280px 1fr; gap:20px;">
               <div>
                 <div style="background:#000; border-radius:var(--radius-md); overflow:hidden; aspect-ratio:9/14; display:flex; align-items:center; justify-content:center;">
-                  <video src="${video.videoUrl}" controls autoplay muted playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+                  <video src="${playableUrl}" controls autoplay muted playsinline style="width:100%; height:100%; object-fit:cover;"></video>
                 </div>
                 <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:0.75rem; color:var(--text-muted); font-weight:600;">
                   <span>Duration: ${video.duration}</span>
@@ -1827,6 +1845,10 @@ class OmniFlowApp {
 
                 <div style="margin-top:auto; display:flex; gap:10px; justify-content:flex-end;">
                   <button class="btn btn-outline btn-sm" id="btn-save-video-details">Save Changes</button>
+                  <button class="btn btn-primary btn-sm" id="btn-modal-publish-now" style="background:#1877F2; border-color:#1877F2; color:#fff; display:flex; align-items:center; gap:6px;">
+                    <i data-lucide="send"></i>
+                    <span>Publish to Facebook Now</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1846,6 +1868,26 @@ class OmniFlowApp {
       this.closeModal();
       this.showToast('Video updated', 'success');
       this.render();
+    });
+
+    document.getElementById('btn-modal-publish-now')?.addEventListener('click', async () => {
+      const activeFb = project.socialAccounts.find(a => a.id === 'facebook' && a.connected && a.active);
+      const targetName = activeFb ? (activeFb.pageName || 'Facebook Page') : 'Connected Social Accounts';
+      if (!confirm(`Do you want to publish "${video.title}" to ${targetName} now?`)) return;
+
+      this.closeModal();
+      this.showToast(`Publishing "${video.title.substring(0, 25)}..."`, 'info');
+      try {
+        await SchedulerService.publishVideo(project, videoId, (p) => {
+          if (p.message) this.showToast(p.message, 'info');
+        });
+        storage.saveState();
+        this.showToast(`🎉 "${video.title}" published successfully to ${targetName}!`, 'success');
+        this.render();
+      } catch (err) {
+        this.showToast(err.message, 'error');
+        this.render();
+      }
     });
 
     document.getElementById('btn-modal-regen-ai').addEventListener('click', async () => {
@@ -1934,6 +1976,41 @@ class OmniFlowApp {
     }
 
     // Video card actions
+    document.querySelectorAll('.btn-publish-single-video').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const vidId = btn.getAttribute('data-video-id');
+        const project = storage.getActiveProject();
+        const video = project.videos.find(v => v.id === vidId);
+        if (!video) return;
+
+        const activeFb = project.socialAccounts.find(a => a.id === 'facebook' && a.connected && a.active);
+        const targetName = activeFb ? (activeFb.pageName || 'Facebook Page') : 'Connected Social Accounts';
+
+        if (!confirm(`Do you want to publish "${video.title}" to ${targetName} now?`)) {
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2"></i><span>Publishing...</span>';
+        createIcons({ icons });
+
+        this.showToast(`Publishing "${video.title.substring(0, 25)}..."`, 'info');
+
+        try {
+          await SchedulerService.publishVideo(project, vidId, (p) => {
+            if (p.message) this.showToast(p.message, 'info');
+          });
+          storage.saveState();
+          this.showToast(`🎉 "${video.title}" published successfully to ${targetName}!`, 'success');
+          this.render();
+        } catch (err) {
+          this.showToast(err.message, 'error');
+          this.render();
+        }
+      });
+    });
+
     document.querySelectorAll('.btn-open-video-player').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2227,12 +2304,12 @@ class OmniFlowApp {
   // --- PUBLISH ACTION ---
   async runPublishAction() {
     const project = storage.getActiveProject();
-    if (project.videos.length === 0) {
-      this.showToast('No videos available in library.', 'warning');
+    if (!project || project.videos.length === 0) {
+      this.showToast('No videos available in library. Please import a video first.', 'warning');
       return;
     }
 
-    const activeChannels = project.socialAccounts.filter(a => a.connected && a.active);
+    const activeChannels = (project.socialAccounts || []).filter(a => a.connected && a.active);
     if (activeChannels.length === 0) {
       this.showToast('Please connect at least 1 social channel first.', 'warning');
       this.currentTab = 'social';
@@ -2241,13 +2318,16 @@ class OmniFlowApp {
     }
 
     try {
-      this.showToast('Publishing scheduled video...', 'info');
-      await SchedulerService.publishVideo(project);
+      this.showToast('Starting video publication...', 'info');
+      const res = await SchedulerService.publishVideo(project, null, (p) => {
+        if (p.message) this.showToast(p.message, 'info');
+      });
       storage.saveState();
-      this.showToast('Video published successfully across connected channels!', 'success');
+      this.showToast(`🎉 "${res.video?.title || 'Video'}" published successfully!`, 'success');
       this.render();
     } catch (err) {
       this.showToast(err.message, 'error');
+      this.render();
     }
   }
 }

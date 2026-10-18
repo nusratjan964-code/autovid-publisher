@@ -22,6 +22,8 @@ function apiDevServerPlugin() {
             handlerModule = await import('./api/facebook/pages.js');
           } else if (pathname === '/api/facebook/select-page') {
             handlerModule = await import('./api/facebook/select-page.js');
+          } else if (pathname === '/api/facebook/upload-token') {
+            handlerModule = await import('./api/facebook/upload-token.js');
           } else if (pathname === '/api/facebook/status') {
             handlerModule = await import('./api/facebook/status.js');
           } else if (pathname === '/api/facebook/publish') {

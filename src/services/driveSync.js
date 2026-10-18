@@ -1,4 +1,5 @@
 // Google Drive & Local Video File Processing Service (Zero Fake Data)
+import { saveVideoBlob } from './videoStore.js';
 
 export class DriveSyncService {
   /**
@@ -142,11 +143,19 @@ export class DriveSyncService {
       const file = videoFiles[i];
       const objectUrl = URL.createObjectURL(file);
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+      const videoId = `vid_local_${Date.now()}_${i}`;
+
+      // Persist binary file in IndexedDB so it survives page reloads
+      try {
+        await saveVideoBlob(videoId, file);
+      } catch (e) {
+        console.warn('[DriveSync] IndexedDB save notice:', e);
+      }
 
       const metadata = await this.extractVideoMetadata(objectUrl, file.name);
 
       processedVideos.push({
-        id: `vid_local_${Date.now()}_${i}`,
+        id: videoId,
         title: file.name,
         duration: metadata.durationFormatted || '0:30',
         size: sizeMb,

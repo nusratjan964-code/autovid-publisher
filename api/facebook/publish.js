@@ -24,7 +24,7 @@ function resolveDirectMediaUrl(url) {
   const driveMatch = str.match(/\/d\/([a-zA-Z0-9_-]+)/) || str.match(/id=([a-zA-Z0-9_-]+)/);
   if (driveMatch) {
     const fileId = driveMatch[1];
-    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}`;
   }
   return str;
 }

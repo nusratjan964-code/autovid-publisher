@@ -1,4 +1,6 @@
 // LocalStorage & State Management with Zero Fake Data
+import { deleteVideoBlob } from './videoStore.js';
+
 const STORAGE_KEY = 'omniflow_studio_clean_state_v2';
 
 const emptyInitialState = {
@@ -206,6 +208,11 @@ class StorageService {
     if (!project) return;
     project.videos = project.videos.filter(v => v.id !== videoId);
     this.saveState();
+    try {
+      deleteVideoBlob(videoId);
+    } catch (e) {
+      // safe fallback
+    }
   }
 
   addLog(logItem) {
