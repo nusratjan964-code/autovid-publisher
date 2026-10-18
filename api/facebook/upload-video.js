@@ -1,6 +1,12 @@
 import { getPageAccessToken, getActivePageSanitized } from '../../lib/facebookCredentials.js';
 
 const GRAPH_VERSION = 'v21.0';
+ 
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
 
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
@@ -30,7 +36,22 @@ export default async function handler(req, res) {
     });
   }
 
-  if (!req.rawBuffer || req.rawBuffer.length === 0) {
+  let videoBuffer = req.rawBuffer;
+  if (!videoBuffer) {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      if (chunks.length > 0) {
+        videoBuffer = Buffer.concat(chunks);
+      }
+    } catch (e) {
+      console.warn('[UploadVideo] Stream chunk read error:', e.message);
+    }
+  }
+
+  if (!videoBuffer || videoBuffer.length === 0) {
     return res.status(400).json({
       success: false,
       error: 'VIDEO_BINARY_REQUIRED',
@@ -60,15 +81,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log(`[Facebook Video Upload] Streaming ${(req.rawBuffer.length / (1024 * 1024)).toFixed(2)} MB video to Page ${pageId}...`);
+    console.log(`[Facebook Video Upload] Streaming ${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB video to Page ${pageId}...`);
 
     const fbRes = await fetch(`https://graph-video.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pageId)}/videos?access_token=${encodeURIComponent(effectiveToken)}`, {
       method: 'POST',
       headers: {
         'content-type': req.headers['content-type'] || 'multipart/form-data',
-        'content-length': String(req.rawBuffer.length)
+        'content-length': String(videoBuffer.length)
       },
-      body: req.rawBuffer
+      body: videoBuffer
     });
 
     const fbData = await fbRes.json();

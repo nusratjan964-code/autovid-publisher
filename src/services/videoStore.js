@@ -53,25 +53,24 @@ export async function getVideoBlob(id) {
 }
 
 export async function findVideoBlob(keyOrTitle = '') {
+  if (!keyOrTitle) return null;
   try {
     const db = await openDB();
     return new Promise((resolve) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const req = store.openCursor();
-      let latestBlob = null;
+      const q = String(keyOrTitle || '').trim().toLowerCase();
       req.onsuccess = (e) => {
         const cursor = e.target.result;
         if (cursor) {
-          latestBlob = cursor.value;
-          const k = String(cursor.key).toLowerCase();
-          const q = String(keyOrTitle || '').toLowerCase();
-          if (q && (k.includes(q) || q.includes(k))) {
+          const k = String(cursor.key || '').trim().toLowerCase();
+          if (k === q || (k.length > 5 && q.length > 5 && (k.includes(q) || q.includes(k)))) {
             return resolve(cursor.value);
           }
           cursor.continue();
         } else {
-          resolve(latestBlob);
+          resolve(null);
         }
       };
       req.onerror = () => resolve(null);

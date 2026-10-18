@@ -3534,6 +3534,14 @@ class OmniFlowApp {
                   </a>
                 </div>
                 <textarea class="form-input" id="quick-publish-token" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical;" placeholder="নতুন Access Token দিন (EAA... বা EAAT...)">${existingFbToken || ''}</textarea>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-modal-test-facebook" style="border-color:#1877F2; color:#1877F2; font-size:0.78rem; display:flex; align-items:center; gap:4px; padding:4px 10px;">
+                    <i data-lucide="shield-check" style="width:13px; height:13px;"></i>
+                    <span>ফেসবুক টোকেন টেস্ট</span>
+                  </button>
+                  <span style="font-size:0.73rem; color:var(--text-muted);">Explorer থেকে টোকেন কপি করে টেস্ট করুন</span>
+                </div>
+                <div id="modal-fb-verify-status" style="margin-top:6px; display:none;"></div>
               </div>
             </div>
 
@@ -3645,6 +3653,68 @@ class OmniFlowApp {
             badge.className = 'badge badge-success';
             badge.innerHTML = `✓ ভিডিও ফাইল প্রস্তুত (${sizeMb} MB)`;
           }
+        }
+      });
+    }
+
+    // Test Facebook Token
+    const testFbBtn = document.getElementById('btn-modal-test-facebook');
+    if (testFbBtn) {
+      testFbBtn.addEventListener('click', async () => {
+        const val = (document.getElementById('quick-publish-token')?.value || '').trim();
+        const statusBox = document.getElementById('modal-fb-verify-status');
+        if (!val) {
+          alert('অনুগ্রহ করে Facebook Access Token দিন।');
+          return;
+        }
+        testFbBtn.disabled = true;
+        testFbBtn.innerText = 'যাচাই হচ্ছে...';
+        if (statusBox) {
+          statusBox.style.display = 'block';
+          statusBox.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">Meta Graph API যাচাই হচ্ছে...</span>';
+        }
+
+        try {
+          const res = await fetch('/api/facebook/pages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: val })
+          });
+          const data = await res.json();
+          if (res.ok && data.success && data.pages && data.pages.length > 0) {
+            const pg = data.pages.find(p => p.id === pageId) || data.pages[0];
+            SocialManagerService.setFacebookToken(project, pg.accessToken || val);
+            storage.saveState();
+            if (statusBox) {
+              statusBox.innerHTML = `
+                <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:600;">
+                  ✓ ফেসবুক পেজ ভেরিফাইড: <strong>${pg.name}</strong> (${pg.id}) &bull; Ready to Post
+                </div>
+              `;
+            }
+            this.showToast(`Facebook Page "${pg.name}" ভেরিফাইড ও সংরক্ষিত!`, 'success');
+          } else {
+            const err = data.message || data.error || 'Invalid or Expired Facebook Token';
+            if (statusBox) {
+              statusBox.innerHTML = `
+                <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#EF4444;">
+                  ⚠ ত্রুটি: ${err}
+                </div>
+              `;
+            }
+          }
+        } catch (err) {
+          if (statusBox) {
+            statusBox.innerHTML = `
+              <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#EF4444;">
+                ⚠ নেটওয়ার্ক ত্রুটি: ${err.message}
+              </div>
+            `;
+          }
+        } finally {
+          testFbBtn.disabled = false;
+          testFbBtn.innerHTML = '<i data-lucide="shield-check" style="width:13px; height:13px;"></i> <span>ফেসবুক টোকেন টেস্ট</span>';
+          createIcons({ icons });
         }
       });
     }

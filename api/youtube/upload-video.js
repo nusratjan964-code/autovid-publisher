@@ -58,6 +58,12 @@ async function resolveEffectiveYouTubeToken(providedToken) {
   return token;
 }
 
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
 
@@ -79,7 +85,22 @@ export default async function handler(req, res) {
     });
   }
 
-  if (!req.rawBuffer || req.rawBuffer.length === 0) {
+  let videoBuffer = req.rawBuffer;
+  if (!videoBuffer) {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      if (chunks.length > 0) {
+        videoBuffer = Buffer.concat(chunks);
+      }
+    } catch (e) {
+      console.warn('[YouTube Upload] Stream chunk read error:', e.message);
+    }
+  }
+
+  if (!videoBuffer || videoBuffer.length === 0) {
     return res.status(400).json({
       success: false,
       error: 'VIDEO_BINARY_REQUIRED',
@@ -88,7 +109,7 @@ export default async function handler(req, res) {
   }
 
   const contentType = req.headers['content-type'] || 'video/mp4';
-  const sizeMb = (req.rawBuffer.length / (1024 * 1024)).toFixed(2);
+  const sizeMb = (videoBuffer.length / (1024 * 1024)).toFixed(2);
   console.log(`[YouTube Shorts Upload] Starting resumable upload for ${sizeMb} MB video ("${title}")...`);
 
   try {
@@ -111,7 +132,7 @@ export default async function handler(req, res) {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json; charset=UTF-8',
-        'X-Upload-Content-Length': String(req.rawBuffer.length),
+        'X-Upload-Content-Length': String(videoBuffer.length),
         'X-Upload-Content-Type': contentType
       },
       body: JSON.stringify(metadata)
@@ -154,9 +175,9 @@ export default async function handler(req, res) {
       method: 'PUT',
       headers: {
         'Content-Type': contentType,
-        'Content-Length': String(req.rawBuffer.length)
+        'Content-Length': String(videoBuffer.length)
       },
-      body: req.rawBuffer
+      body: videoBuffer
     });
 
     const uploadData = await uploadRes.json();

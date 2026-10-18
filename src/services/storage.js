@@ -46,6 +46,11 @@ class StorageService {
                   if (a.name === 'Facebook Reels') {
                     a.name = 'Facebook Reels & Page';
                   }
+                  if (!a.pageId) a.pageId = '1309863422219233';
+                  if (!a.pageName) a.pageName = 'Chiku bd';
+                  if (!a.handle) a.handle = '@chikubd';
+                  if (a.connected === undefined) a.connected = true;
+                  if (a.active === undefined) a.active = true;
                 }
                 if (a.id === 'youtube') {
                   if (a.connected === undefined) {

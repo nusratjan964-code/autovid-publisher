@@ -169,60 +169,33 @@ export class SchedulerService {
    */
   static async resolveVideoBlob(video, project = null) {
     if (!video) return null;
-    if (video.fileReference instanceof Blob) {
+    if (video.fileReference instanceof Blob && video.fileReference.size > 1000) {
       return video.fileReference;
     }
+
+    // 1. Exact ID lookup in IndexedDB
     try {
       const b = await getVideoBlob(video.id);
-      if (b instanceof Blob) {
+      if (b instanceof Blob && b.size > 1000) {
         video.fileReference = b;
         return b;
       }
     } catch (e) {
-      console.warn('[Scheduler] IndexedDB blob lookup:', e);
+      console.warn('[Scheduler] IndexedDB blob lookup error:', e);
     }
 
-    try {
-      const fb = await findVideoBlob(video.title || video.id);
-      if (fb instanceof Blob) {
-        video.fileReference = fb;
-        return fb;
-      }
-    } catch (e) {
-      console.warn('[Scheduler] IndexedDB findVideoBlob lookup:', e);
-    }
-
-    // 1. Blob URL
-    if (video.videoUrl && video.videoUrl.startsWith('blob:')) {
+    // 2. Exact Title lookup in IndexedDB
+    if (video.title) {
       try {
-        const r = await fetch(video.videoUrl);
-        if (r.ok) {
-          const b = await r.blob();
+        const b = await getVideoBlob(video.title);
+        if (b instanceof Blob && b.size > 1000) {
           video.fileReference = b;
-          try { await saveVideoBlob(video.id, b); } catch (e) {}
           return b;
         }
-      } catch (e) {
-        console.warn('[Scheduler] Blob URL fetch error:', e);
-      }
+      } catch (e) {}
     }
 
-    // 2. Relative API proxy URL (e.g. /api/drive/download?fileId=...)
-    if (video.videoUrl && video.videoUrl.startsWith('/api/')) {
-      try {
-        const r = await fetch(video.videoUrl);
-        if (r.ok) {
-          const b = await r.blob();
-          video.fileReference = b;
-          try { await saveVideoBlob(video.id, b); } catch (e) {}
-          return b;
-        }
-      } catch (e) {
-        console.warn('[Scheduler] API proxy URL fetch error:', e);
-      }
-    }
-
-    // 3. Google Drive File ID via server-side download proxy
+    // 3. Google Drive File ID via server-side download proxy (Ensures THIS exact video is fetched!)
     if (video.driveFileId) {
       try {
         let authQuery = '';
@@ -232,30 +205,69 @@ export class SchedulerService {
             if (ytToken) authQuery = `&token=${encodeURIComponent(ytToken)}`;
           } catch (e) {}
         }
+        console.log(`[Scheduler] Fetching exact video file for "${video.title}" from Drive (ID: ${video.driveFileId})...`);
         const r = await fetch(`/api/drive/download?fileId=${encodeURIComponent(video.driveFileId)}${authQuery}`);
         if (r.ok) {
           const b = await r.blob();
-          video.fileReference = b;
-          try { await saveVideoBlob(video.id, b); } catch (e) {}
-          return b;
+          if (b && b.size > 1000 && !b.type.includes('html')) {
+            video.fileReference = b;
+            try { await saveVideoBlob(video.id, b); } catch (e) {}
+            return b;
+          }
         }
       } catch (e) {
         console.warn('[Scheduler] Drive file proxy download error:', e);
       }
     }
 
-    // 4. Remote HTTP/HTTPS URL
+    // 4. Relative API proxy URL (e.g. /api/drive/download?fileId=...)
+    if (video.videoUrl && video.videoUrl.startsWith('/api/')) {
+      try {
+        const r = await fetch(video.videoUrl);
+        if (r.ok) {
+          const b = await r.blob();
+          if (b && b.size > 1000 && !b.type.includes('html')) {
+            video.fileReference = b;
+            try { await saveVideoBlob(video.id, b); } catch (e) {}
+            return b;
+          }
+        }
+      } catch (e) {
+        console.warn('[Scheduler] API proxy URL fetch error:', e);
+      }
+    }
+
+    // 5. Remote HTTP/HTTPS URL
     if (video.videoUrl && (video.videoUrl.startsWith('http://') || video.videoUrl.startsWith('https://'))) {
       try {
         const r = await fetch(video.videoUrl);
         if (r.ok) {
           const b = await r.blob();
-          video.fileReference = b;
-          try { await saveVideoBlob(video.id, b); } catch (e) {}
-          return b;
+          if (b && b.size > 1000 && !b.type.includes('html')) {
+            video.fileReference = b;
+            try { await saveVideoBlob(video.id, b); } catch (e) {}
+            return b;
+          }
         }
       } catch (e) {
         console.warn('[Scheduler] Remote URL fetch error:', e);
+      }
+    }
+
+    // 6. Blob URL
+    if (video.videoUrl && video.videoUrl.startsWith('blob:')) {
+      try {
+        const r = await fetch(video.videoUrl);
+        if (r.ok) {
+          const b = await r.blob();
+          if (b && b.size > 1000) {
+            video.fileReference = b;
+            try { await saveVideoBlob(video.id, b); } catch (e) {}
+            return b;
+          }
+        }
+      } catch (e) {
+        console.warn('[Scheduler] Blob URL fetch error:', e);
       }
     }
 
@@ -388,60 +400,114 @@ export class SchedulerService {
         externalUrls['Facebook'] = `https://www.facebook.com/${targetPageId}/posts/${simPostId}`;
       } else {
         try {
-          onProgress({ step: 4, percent: 75, message: `Publishing real video to Facebook Page "${pageName}"...` });
+          const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
+          onProgress({ step: 4, percent: 75, message: `Facebook Page "${pageName}"-এ আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
 
-          onProgress({ step: 4, percent: 80, message: `Facebook Page ভিডিও আপলোড অনুমতি চাওয়া হচ্ছে...` });
-
-          const authRes = await fetch('/api/facebook/upload-token', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-fb-token': fbToken
-            },
-            body: JSON.stringify({
-              pageId: targetPageId,
-              token: fbToken
-            })
-          });
-          const authData = await authRes.json();
-
-          if (!authRes.ok || !authData.success || !authData.token) {
-            const err = authData.error || 'Failed to acquire Facebook Page upload authorization.';
-            if (err.includes('expired') || err.includes('190') || err.includes('missing')) {
-              throw new Error(`FACEBOOK_TOKEN_EXPIRED: ${err}`);
+          // Step A: Resolve page access token
+          let pageToken = fbToken;
+          try {
+            const authRes = await fetch('/api/facebook/upload-token', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-fb-token': fbToken
+              },
+              body: JSON.stringify({
+                pageId: targetPageId,
+                token: fbToken
+              })
+            });
+            if (authRes.ok) {
+              const authData = await authRes.json();
+              if (authData.token) pageToken = authData.token;
             }
-            throw new Error(err);
+          } catch (e) {
+            console.warn('[Scheduler] Facebook upload-token lookup notice:', e);
           }
 
-          const pageToken = authData.token;
-          const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
-          onProgress({ step: 4, percent: 84, message: `ফেসবুক পেজে আসল ভিডিও আপলোড হচ্ছে (${sizeMb} MB)...` });
+          if (!pageToken) {
+            throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token অনুপস্থিত। ফেসবুকে পোস্ট করতে Access Token দিন।');
+          }
 
-          const formData = new FormData();
-          formData.append('title', video.title || '');
-          formData.append('description', video.caption || video.title || '');
-          formData.append('source', fileBlob, video.title || 'video.mp4');
+          let uploadedVideoId = null;
+          let directErrorMsg = null;
 
-          const uploadRes = await fetch(`/api/facebook/upload-video?pageId=${encodeURIComponent(targetPageId)}&token=${encodeURIComponent(pageToken)}`, {
-            method: 'POST',
-            body: formData
-          });
+          // Step B: Direct Browser-to-Meta Video API Upload (Bypasses Vercel 4.5MB payload limit & timeout)
+          try {
+            onProgress({ step: 4, percent: 80, message: `ফেসবুক ক্লাউডে সরাসরি আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
+            const directFormData = new FormData();
+            directFormData.append('access_token', pageToken);
+            directFormData.append('title', (video.title || 'Video').substring(0, 100));
+            directFormData.append('description', video.caption || video.title || '');
+            directFormData.append('source', fileBlob, video.title || 'video.mp4');
 
-          const uploadData = await uploadRes.json();
+            const directRes = await fetch(`https://graph-video.facebook.com/v21.0/${encodeURIComponent(targetPageId)}/videos`, {
+              method: 'POST',
+              body: directFormData
+            });
 
-          if (uploadRes.ok && uploadData.success && uploadData.videoId) {
-            const postUrl = uploadData.postUrl || `https://www.facebook.com/${targetPageId}/videos/${uploadData.videoId}`;
-            externalUrls['Facebook'] = postUrl;
-            console.log('[Scheduler] Direct Facebook video upload success:', postUrl);
-          } else {
-            const errMsg = uploadData.message || uploadData.error || 'Meta video upload failed';
-            if (uploadData.error === 'FACEBOOK_TOKEN_EXPIRED' || uploadData.code === 190) {
-              throw new Error(`FACEBOOK_TOKEN_EXPIRED: Facebook Page token expired (Code 190). Please update token.`);
+            const directData = await directRes.json();
+            if (directRes.ok && directData.id) {
+              uploadedVideoId = directData.id;
+              console.log('[Scheduler] Direct Facebook video upload success! Video ID:', uploadedVideoId);
+            } else if (directData.error) {
+              const fbErr = directData.error;
+              const isExpired = fbErr.code === 190 || fbErr.error_subcode === 463 || (fbErr.message && fbErr.message.toLowerCase().includes('expired'));
+              if (isExpired) {
+                throw new Error(`FACEBOOK_TOKEN_EXPIRED: Facebook Access Token expired (Code ${fbErr.code})। অনুগ্রহ করে নতুন টোকেন প্রদান করুন।`);
+              }
+              directErrorMsg = fbErr.message || `Meta Graph API error ${fbErr.code}`;
             }
-            throw new Error(`Facebook Video Upload Failed: ${errMsg}`);
+          } catch (dErr) {
+            if (dErr.message && (dErr.message.includes('FACEBOOK_TOKEN_EXPIRED') || dErr.message.includes('190'))) {
+              throw dErr;
+            }
+            console.warn('[Scheduler] Direct Facebook upload failed, attempting server relay:', dErr.message);
+            directErrorMsg = dErr.message;
+          }
+
+          // Step C: Server Relay Fallback (if direct browser upload was blocked)
+          if (!uploadedVideoId) {
+            onProgress({ step: 4, percent: 84, message: `সার্ভার রিলে মাধ্যমে ফেসবুকে ভিডিও আপলোড করা হচ্ছে (${sizeMb} MB)...` });
+
+            const formData = new FormData();
+            formData.append('title', video.title || '');
+            formData.append('description', video.caption || video.title || '');
+            formData.append('source', fileBlob, video.title || 'video.mp4');
+
+            const uploadRes = await fetch(`/api/facebook/upload-video?pageId=${encodeURIComponent(targetPageId)}&token=${encodeURIComponent(pageToken)}`, {
+              method: 'POST',
+              body: formData
+            });
+
+            const uploadData = await uploadRes.json();
+
+            if (uploadRes.ok && uploadData.success && uploadData.videoId) {
+              uploadedVideoId = uploadData.videoId;
+            } else {
+              const errMsg = uploadData.message || uploadData.error || directErrorMsg || 'Meta video upload failed';
+              if (uploadData.error === 'FACEBOOK_TOKEN_EXPIRED' || uploadData.code === 190 || (errMsg && (errMsg.includes('190') || errMsg.includes('expired')))) {
+                throw new Error(`FACEBOOK_TOKEN_EXPIRED: Facebook Page token expired (Code 190). Please update token.`);
+              }
+              throw new Error(`Facebook Video Upload Failed: ${errMsg}`);
+            }
+          }
+
+          if (uploadedVideoId) {
+            const postUrl = `https://www.facebook.com/${targetPageId}/videos/${uploadedVideoId}`;
+            externalUrls['Facebook'] = postUrl;
+            console.log('[Scheduler] Facebook video upload completed:', postUrl);
           }
         } catch (err) {
-          if (err.message && (err.message.includes('FACEBOOK_TOKEN_REQUIRED') || err.message.includes('FACEBOOK_TOKEN_EXPIRED') || err.message.includes('VIDEO_BINARY_REQUIRED'))) {
+          const isFatalAuth = err.message && (
+            err.message.includes('FACEBOOK_TOKEN') ||
+            err.message.includes('190') ||
+            err.message.includes('expired') ||
+            err.message.includes('OAuthException') ||
+            err.message.includes('টোকেন') ||
+            err.message.includes('VIDEO_BINARY_REQUIRED')
+          );
+          if (isFatalAuth) {
             throw err;
           }
           errors.push(`Facebook: ${err.message}`);
@@ -518,25 +584,49 @@ export class SchedulerService {
     }
 
     // Step 4: Handle results
-    if (errors.length > 0 && Object.keys(externalUrls).length === 0) {
-      video.status = 'Failed';
-      video.error = errors.join('; ');
+    if (errors.length > 0) {
+      if (Object.keys(externalUrls).length === 0) {
+        video.status = 'Failed';
+        video.error = errors.join('; ');
 
-      const failedLogItem = {
-        id: 'log_' + Date.now(),
-        timestamp: new Date().toLocaleString(),
-        videoTitle: video.title,
-        platforms: platformNames,
-        status: 'failed',
-        captionSnippet: video.caption ? video.caption.substring(0, 100) + '...' : '',
-        message: `Publishing failed: ${errors.join('; ')}`,
-        externalUrls: {}
-      };
+        const failedLogItem = {
+          id: 'log_' + Date.now(),
+          timestamp: new Date().toLocaleString(),
+          videoTitle: video.title,
+          platforms: platformNames,
+          status: 'failed',
+          captionSnippet: video.caption ? video.caption.substring(0, 100) + '...' : '',
+          message: `Publishing failed: ${errors.join('; ')}`,
+          externalUrls: {}
+        };
 
-      if (!project.logs) project.logs = [];
-      project.logs.unshift(failedLogItem);
+        if (!project.logs) project.logs = [];
+        project.logs.unshift(failedLogItem);
 
-      throw new Error(`Publishing failed: ${errors.join('; ')}`);
+        throw new Error(`Publishing failed: ${errors.join('; ')}`);
+      } else {
+        video.status = 'Partially Published';
+        video.publishedAt = new Date().toLocaleString();
+        video.platforms = Object.keys(externalUrls);
+        video.error = errors.join('; ');
+        video.externalUrls = externalUrls;
+
+        const partialLogItem = {
+          id: 'log_' + Date.now(),
+          timestamp: new Date().toLocaleString(),
+          videoTitle: video.title,
+          platforms: Object.keys(externalUrls),
+          status: 'partial',
+          captionSnippet: video.caption ? video.caption.substring(0, 100) + '...' : '',
+          message: `আংশিক সম্পন্ন: ${Object.keys(externalUrls).join(', ')}-এ পোস্ট সফল, তবে: ${errors.join('; ')}`,
+          externalUrls
+        };
+
+        if (!project.logs) project.logs = [];
+        project.logs.unshift(partialLogItem);
+
+        throw new Error(`আংশিক সফল: ${Object.keys(externalUrls).join(', ')}-এ ভিডিও পোস্ট হয়েছে, কিন্তু: ${errors.join('; ')}`);
+      }
     }
 
     // Step 5: Mark as published
