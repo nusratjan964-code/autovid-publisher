@@ -3,7 +3,8 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/drive/download", "destination": "/api/drive/scan?download=1" }
+    { "source": "/api/drive/download", "destination": "/api/drive/scan?download=1" },
+    { "source": "/api/account", "destination": "/api/queue?action=account" }
   ],
   "crons": [
     {

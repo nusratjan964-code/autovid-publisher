@@ -36,7 +36,7 @@ function apiDevServerPlugin() {
             handlerModule = await import('./api/facebook/publish.js');
           } else if (pathname === '/api/drive/scan' || pathname === '/api/drive/download') {
             handlerModule = await import('./api/drive/scan.js');
-          } else if (pathname === '/api/queue') {
+          } else if (pathname === '/api/queue' || pathname === '/api/account') {
             handlerModule = await import('./api/queue.js');
           } else if (pathname === '/api/cron') {
             handlerModule = await import('./api/cron.js');

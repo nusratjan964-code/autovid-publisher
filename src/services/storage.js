@@ -17,6 +17,8 @@ const emptyInitialState = {
 
 class StorageService {
   constructor() {
+    this.cloudSyncTimeout = null;
+    this.lastSyncedAt = null;
     this.state = this.loadState();
   }
 
@@ -85,7 +87,7 @@ class StorageService {
     return JSON.parse(JSON.stringify(emptyInitialState));
   }
 
-  saveState(stateToSave = null) {
+  saveState(stateToSave = null, skipCloudSync = false) {
     if (stateToSave) {
       this.state = stateToSave;
     }
@@ -94,6 +96,94 @@ class StorageService {
     } catch (e) {
       console.error('Failed to save to localStorage', e);
     }
+
+    if (!skipCloudSync && this.state.currentUser?.isLoggedIn) {
+      this.scheduleCloudSync();
+    }
+  }
+
+  scheduleCloudSync() {
+    if (this.cloudSyncTimeout) clearTimeout(this.cloudSyncTimeout);
+    this.cloudSyncTimeout = setTimeout(() => {
+      this.syncToCloud().catch(err => console.warn('[Storage] Auto cloud sync note:', err.message));
+    }, 2000);
+  }
+
+  async syncToCloud() {
+    const user = this.state.currentUser;
+    if (!user || (!user.email && !user.name)) return false;
+
+    try {
+      const res = await fetch('/api/account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: user.name,
+          email: user.email,
+          state: {
+            projects: this.state.projects,
+            activeProjectId: this.state.activeProjectId,
+            currentUser: user,
+            updatedAt: new Date().toISOString()
+          }
+        })
+      });
+
+      if (res.ok) {
+        this.lastSyncedAt = new Date();
+        return true;
+      }
+    } catch (e) {
+      console.warn('[Storage] syncToCloud notice:', e.message);
+    }
+    return false;
+  }
+
+  async syncFromCloud(username, email) {
+    const uName = (username || '').trim();
+    const uEmail = (email || '').trim();
+    if (!uName && !uEmail) return { success: false, found: false };
+
+    try {
+      const q = new URLSearchParams({
+        action: 'sync',
+        username: uName,
+        email: uEmail
+      }).toString();
+
+      const res = await fetch(`/api/account?${q}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.found && data.account?.state) {
+          const remoteState = data.account.state;
+          if (Array.isArray(remoteState.projects) && remoteState.projects.length > 0) {
+            this.state.projects = remoteState.projects;
+            this.state.activeProjectId = remoteState.activeProjectId || remoteState.projects[0].id;
+          }
+
+          this.state.currentUser = {
+            id: remoteState.currentUser?.id || 'usr_' + Date.now(),
+            name: uName || data.account.username || this.state.currentUser.name,
+            email: uEmail || data.account.email || this.state.currentUser.email,
+            avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(uName || 'Creator')}&backgroundColor=4f46e5&textColor=ffffff`,
+            isLoggedIn: true
+          };
+
+          this.lastSyncedAt = new Date();
+          this.saveState(null, true);
+          return { success: true, found: true, projectCount: this.state.projects.length };
+        }
+      }
+    } catch (e) {
+      console.warn('[Storage] syncFromCloud notice:', e.message);
+    }
+
+    // If no remote state found, but user has local projects, upload them as initial cloud backup
+    if (this.state.projects.length > 0) {
+      this.syncToCloud().catch(() => {});
+    }
+
+    return { success: true, found: false, projectCount: this.state.projects.length };
   }
 
   getState() {
@@ -124,7 +214,7 @@ class StorageService {
       avatar: '',
       isLoggedIn: false
     };
-    this.saveState();
+    this.saveState(null, true);
   }
 
   getActiveProject() {

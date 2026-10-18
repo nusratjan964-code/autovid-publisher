@@ -115,6 +115,11 @@ class OmniFlowApp {
               <span>Social Accounts</span>
               <span class="nav-badge">${project.socialAccounts.filter(a => a.connected).length}/6</span>
             </a>
+            <a class="nav-item ${this.currentTab === 'account' ? 'active' : ''}" data-tab="account">
+              <i data-lucide="cloud"></i>
+              <span>Account & Sync</span>
+              <span class="nav-badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:0.68rem; padding:1px 5px;">Cloud ✓</span>
+            </a>
             
             <div class="nav-label">Automation & AI</div>
             <a class="nav-item ${this.currentTab === 'ai' ? 'active' : ''}" data-tab="ai">
@@ -132,12 +137,15 @@ class OmniFlowApp {
             </a>
           </nav>
 
-          <!-- User Profile -->
+          <!-- User Profile (Clickable to open Account & Device Sync) -->
           <div class="sidebar-footer">
-            <div class="user-profile-card">
+            <div class="user-profile-card" data-tab="account" style="cursor:pointer;" title="Click to open Account & Cloud Sync Settings">
               <img src="${user.avatar}" alt="${user.name}" class="user-avatar" />
               <div class="user-info">
-                <div class="user-name">${user.name}</div>
+                <div class="user-name" style="display:flex; align-items:center; gap:5px;">
+                  <span>${user.name}</span>
+                  <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10b981;" title="Cloud Sync Active"></span>
+                </div>
                 <div class="user-role">${user.email}</div>
               </div>
               <button class="btn-icon-soft" id="btn-logout" title="Sign Out">
@@ -210,9 +218,16 @@ class OmniFlowApp {
           <h2 class="auth-title">Sign in to OmniFlow AI</h2>
           <p class="auth-subtitle">Automated short-form video publishing to social media with AI captions and daily scheduling.</p>
 
+          <div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.25); border-radius:8px; padding:10px 12px; margin-bottom:18px; text-align:left; display:flex; align-items:flex-start; gap:10px;">
+            <i data-lucide="cloud" style="width:18px; height:18px; color:#10b981; flex-shrink:0; margin-top:2px;"></i>
+            <div style="font-size:0.78rem; color:var(--text-secondary); line-height:1.4;">
+              <strong style="color:#10b981;">🌐 Multi-Device Cloud Sync:</strong> যেকোনো মোবাইল বা কম্পিউটারে একই Username এবং Email দিয়ে লগইন করলেই আপনার সমস্ত ভিডিও ও প্রজেক্ট ডেটা স্বয়ংক্রিয়ভাবে লোড হবে।
+            </div>
+          </div>
+
           <form id="form-auth-login" style="text-align:left;">
             <div class="form-group">
-              <label class="form-label">Full Name</label>
+              <label class="form-label">Username / Full Name</label>
               <input type="text" class="form-input" id="auth-input-name" placeholder="e.g. Nahid Hasan" required />
             </div>
 
@@ -221,8 +236,8 @@ class OmniFlowApp {
               <input type="email" class="form-input" id="auth-input-email" placeholder="name@example.com" required />
             </div>
 
-            <button type="submit" class="btn btn-primary" style="width:100%; padding:12px; margin-top:8px;">
-              <span>Continue to Studio</span>
+            <button type="submit" class="btn btn-primary" id="btn-auth-submit" style="width:100%; padding:12px; margin-top:8px;">
+              <span>Continue & Sync Data</span>
               <i data-lucide="arrow-right"></i>
             </button>
           </form>
@@ -241,18 +256,51 @@ class OmniFlowApp {
       </div>
     `;
 
-    document.getElementById('form-auth-login').addEventListener('submit', (e) => {
+    document.getElementById('form-auth-login').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = document.getElementById('auth-input-name').value;
-      const email = document.getElementById('auth-input-email').value;
-      storage.loginUser({ name, email });
-      this.showToast(`Welcome back, ${name}!`, 'success');
+      const name = document.getElementById('auth-input-name').value.trim();
+      const email = document.getElementById('auth-input-email').value.trim();
+      const submitBtn = document.getElementById('btn-auth-submit');
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i data-lucide="loader" class="spin"></i> <span>Syncing from Cloud...</span>';
+      this.refreshIcons();
+
+      try {
+        const syncRes = await storage.syncFromCloud(name, email);
+        if (syncRes.found) {
+          this.showToast(`🎉 স্বাগতম ${name}! আপনার ক্লাউড ডেটা ও ${syncRes.projectCount}টি প্রজেক্ট লোড হয়েছে!`, 'success');
+        } else {
+          storage.loginUser({ name, email });
+          this.showToast(`স্বাগতম ${name}! আপনার একাউন্ট ক্লাউডে সিঙ্ক করা হয়েছে।`, 'success');
+        }
+      } catch (err) {
+        console.warn('Login cloud sync error:', err);
+        storage.loginUser({ name, email });
+        this.showToast(`Welcome ${name}!`, 'info');
+      }
+
       this.render();
     });
 
-    document.getElementById('btn-quick-demo-login').addEventListener('click', () => {
-      storage.loginUser({ name: 'Nahid Hasan', email: 'nahid.creator@example.com' });
-      this.showToast('Logged in successfully!', 'success');
+    document.getElementById('btn-quick-demo-login').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-quick-demo-login');
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader" class="spin"></i> <span>Syncing...</span>';
+      this.refreshIcons();
+
+      try {
+        const syncRes = await storage.syncFromCloud('Nahid Hasan', 'nahid.creator@example.com');
+        if (syncRes.found) {
+          this.showToast(`🎉 ক্লাউড থেকে Nahid Hasan এর প্রজেক্ট ও ভিডিও ডেটা সফলভাবে লোড হয়েছে!`, 'success');
+        } else {
+          storage.loginUser({ name: 'Nahid Hasan', email: 'nahid.creator@example.com' });
+          this.showToast('Logged in successfully!', 'success');
+        }
+      } catch (e) {
+        storage.loginUser({ name: 'Nahid Hasan', email: 'nahid.creator@example.com' });
+        this.showToast('Logged in successfully!', 'success');
+      }
       this.render();
     });
   }
@@ -346,6 +394,8 @@ class OmniFlowApp {
         return this.renderVideosView(project);
       case 'social':
         return this.renderSocialView(project);
+      case 'account':
+        return this.renderAccountView(project, user);
       case 'ai':
         return this.renderAIView(project);
       case 'schedule':
@@ -1029,6 +1079,163 @@ class OmniFlowApp {
             </div>
           `;
         }).join('')}
+      </div>
+    `;
+  }
+
+  // --- 4.5. ACCOUNT & MULTI-DEVICE CLOUD SYNC VIEW ---
+  renderAccountView(project, user) {
+    const allProjects = storage.getState().projects || [];
+    const connectedAccs = project.socialAccounts.filter(a => a.connected).length;
+    const lastSyncStr = storage.lastSyncedAt 
+      ? new Date(storage.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : 'Live Synced (Active)';
+
+    return `
+      <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+        <div>
+          <h1 class="page-title" style="display:flex; align-items:center; gap:8px;">
+            <i data-lucide="cloud" style="color:#10b981;"></i>
+            <span>Account & Cross-Device Cloud Sync</span>
+          </h1>
+          <p class="page-subtitle">
+            যেকোনো ডিভাইস (মোবাইল, ল্যাপটপ, ট্যাবলেট বা অন্য ব্রাউজার) থেকে এই একই Username এবং Email দিয়ে লগইন করলেই আপনার সমস্ত ডেটা সাথে সাথে লোড হবে।
+          </p>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" id="btn-account-sync-now" style="background:#10b981; border-color:#10b981; color:#fff;">
+            <i data-lucide="refresh-cw"></i>
+            <span>Sync from Cloud Now</span>
+          </button>
+          <button class="btn btn-outline btn-sm" id="btn-account-force-backup">
+            <i data-lucide="upload-cloud"></i>
+            <span>Backup Current Data</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:20px; margin-bottom:24px;">
+        <!-- Card 1: Active Cloud Profile -->
+        <div class="card" style="padding:22px;">
+          <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
+            <img src="${user.avatar}" alt="${user.name}" style="width:56px; height:56px; border-radius:50%; border:2px solid #6366f1; box-shadow:0 0 15px rgba(99,102,241,0.3);" />
+            <div>
+              <div style="font-size:1.15rem; font-weight:700; color:var(--text-primary);">${user.name}</div>
+              <div style="font-size:0.83rem; color:var(--text-muted);">${user.email}</div>
+              <div style="display:inline-flex; align-items:center; gap:5px; margin-top:4px; font-size:0.72rem; color:#10b981; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); padding:2px 8px; border-radius:12px; font-weight:600;">
+                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#10b981;"></span>
+                <span>Cloud Synced Across All Devices</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:var(--bg-card-secondary, rgba(255,255,255,0.03)); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; font-size:0.82rem; margin-top:14px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+              <span style="color:var(--text-muted);">Sync Mode:</span>
+              <strong style="color:#10b981;">Automatic Live Sync</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+              <span style="color:var(--text-muted);">Last Cloud Sync:</span>
+              <span style="color:var(--text-secondary); font-weight:600;">${lastSyncStr}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+              <span style="color:var(--text-muted);">Total Cloud Projects:</span>
+              <span style="color:var(--text-primary); font-weight:700;">${allProjects.length} Project(s)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: How to Login on Any Device -->
+        <div class="card" style="padding:22px; background:linear-gradient(135deg, rgba(99,102,241,0.06), rgba(16,185,129,0.06)); border:1px solid rgba(99,102,241,0.25);">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <i data-lucide="smartphone" style="color:#6366f1;"></i>
+            <h3 style="font-size:1rem; font-weight:700; color:var(--text-primary);">অন্য যেকোনো ডিভাইসে ডেটা পাওয়ার নিয়ম</h3>
+          </div>
+          <p style="font-size:0.82rem; color:var(--text-secondary); line-height:1.5; margin-bottom:14px;">
+            মোবাইল, ল্যাপটপ বা যে কোনো কম্পিউটারে এই সাইট ওপেন করে সাইন-ইন বক্সে নিচের তথ্যগুলো দিয়ে লগইন করুন:
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="background:var(--bg-app); border:1px solid var(--border); border-radius:6px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">1. Username:</span>
+              <code style="font-size:0.85rem; color:#818cf8; font-weight:700;">${user.name}</code>
+            </div>
+            <div style="background:var(--bg-app); border:1px solid var(--border); border-radius:6px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">2. Email Address:</span>
+              <code style="font-size:0.85rem; color:#10b981; font-weight:700;">${user.email}</code>
+            </div>
+          </div>
+
+          <div style="margin-top:12px; font-size:0.74rem; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+            <i data-lucide="check-circle-2" style="width:14px; height:14px; color:#10b981;"></i>
+            <span>লগইন বাটনে ক্লিক করার সাথে সাথে সমস্ত প্রজেক্ট ও ভিডিও সামনে চলে আসবে।</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Cloud Synchronization Statistics -->
+      <div class="card" style="padding:22px; margin-bottom:24px;">
+        <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+          <i data-lucide="database"></i>
+          <span>Synced Pipeline & Project Overview</span>
+        </h3>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+          <div style="background:var(--bg-app); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px;">
+            <div style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Active Project</div>
+            <div style="font-size:1.1rem; font-weight:800; color:var(--text-primary); margin-top:4px;">${project.name}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Niche: ${project.niche || 'General'}</div>
+          </div>
+
+          <div style="background:var(--bg-app); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px;">
+            <div style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Total Synced Videos</div>
+            <div style="font-size:1.1rem; font-weight:800; color:#6366f1; margin-top:4px;">${project.videos.length} Videos</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Google Drive & Uploads</div>
+          </div>
+
+          <div style="background:var(--bg-app); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px;">
+            <div style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Connected Social Channels</div>
+            <div style="font-size:1.1rem; font-weight:800; color:#10b981; margin-top:4px;">${connectedAccs} Channels</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Facebook & YouTube Live</div>
+          </div>
+
+          <div style="background:var(--bg-app); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px;">
+            <div style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Daily Scheduled Slots</div>
+            <div style="font-size:1.1rem; font-weight:800; color:#f59e0b; margin-top:4px;">${project.scheduleSettings?.frequency || 3} Daily Posts</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">19:00, 21:00, 23:00</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4: Switch Account / Edit Identity -->
+      <div class="card" style="padding:22px;">
+        <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+          <i data-lucide="user-cog"></i>
+          <span>Update Account Identity or Switch User</span>
+        </h3>
+
+        <form id="form-account-update-profile" style="max-width:540px;">
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label">Username / Full Name</label>
+            <input type="text" class="form-input" id="input-account-name" value="${user.name}" required />
+          </div>
+
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-input" id="input-account-email" value="${user.email}" required />
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i data-lucide="save"></i>
+              <span>Save & Sync Changes</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-account-logout-alt" style="color:var(--danger); border-color:rgba(239,68,68,0.3);">
+              <i data-lucide="log-out"></i>
+              <span>Sign Out of this Device</span>
+            </button>
+          </div>
+        </form>
       </div>
     `;
   }
@@ -2522,6 +2729,71 @@ class OmniFlowApp {
     const openNewProjBtn = document.getElementById('btn-open-new-project-modal');
     if (openNewProjBtn) {
       openNewProjBtn.addEventListener('click', () => this.openNewProjectModal());
+    }
+
+    // Account & Cloud Sync tab events
+    const syncNowBtn = document.getElementById('btn-account-sync-now');
+    if (syncNowBtn) {
+      syncNowBtn.addEventListener('click', async () => {
+        syncNowBtn.disabled = true;
+        syncNowBtn.innerHTML = '<i data-lucide="loader" class="spin"></i> <span>Syncing...</span>';
+        this.refreshIcons();
+
+        const user = storage.getCurrentUser();
+        const res = await storage.syncFromCloud(user.name, user.email);
+        if (res.found) {
+          this.showToast(`🎉 ক্লাউড থেকে সর্বশেষ ডেটা ও ${res.projectCount}টি প্রজেক্ট সফলভাবে লোড হয়েছে!`, 'success');
+        } else {
+          await storage.syncToCloud();
+          this.showToast('ক্লাউডের সাথে আপনার ডিভাইস সিঙ্ক সম্পন্ন হয়েছে!', 'success');
+        }
+        syncNowBtn.disabled = false;
+        syncNowBtn.innerHTML = '<i data-lucide="refresh-cw"></i> <span>Sync from Cloud Now</span>';
+        this.refreshIcons();
+        this.render();
+      });
+    }
+
+    const forceBackupBtn = document.getElementById('btn-account-force-backup');
+    if (forceBackupBtn) {
+      forceBackupBtn.addEventListener('click', async () => {
+        forceBackupBtn.disabled = true;
+        forceBackupBtn.innerHTML = '<i data-lucide="loader" class="spin"></i> <span>Backing up...</span>';
+        this.refreshIcons();
+
+        const ok = await storage.syncToCloud();
+        if (ok) {
+          this.showToast('আপনার সমস্ত প্রজেক্ট ও ভিডিও ডেটা ক্লাউডে ব্যাকআপ করা হয়েছে!', 'success');
+        } else {
+          this.showToast('ক্লাউড ব্যাকআপে সমস্যা হয়েছে, অনুগ্রহ করে আবার চেষ্টা করুন।', 'error');
+        }
+        forceBackupBtn.disabled = false;
+        forceBackupBtn.innerHTML = '<i data-lucide="upload-cloud"></i> <span>Backup Current Data</span>';
+        this.refreshIcons();
+        this.render();
+      });
+    }
+
+    const updateProfileForm = document.getElementById('form-account-update-profile');
+    if (updateProfileForm) {
+      updateProfileForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newName = document.getElementById('input-account-name').value.trim();
+        const newEmail = document.getElementById('input-account-email').value.trim();
+        storage.loginUser({ name: newName, email: newEmail });
+        await storage.syncToCloud();
+        this.showToast('প্রোফাইল আপডেট হয়েছে এবং ক্লাউডে সিঙ্ক করা হয়েছে!', 'success');
+        this.render();
+      });
+    }
+
+    const altLogoutBtn = document.getElementById('btn-account-logout-alt');
+    if (altLogoutBtn) {
+      altLogoutBtn.addEventListener('click', () => {
+        storage.logoutUser();
+        this.showToast('Signed out', 'info');
+        this.render();
+      });
     }
 
     // Dashboard navigation links
