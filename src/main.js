@@ -6,7 +6,7 @@ import { SocialManagerService, AVAILABLE_PLATFORMS } from './services/socialMana
 import { AICaptionService } from './services/aiCaption.js';
 import { SchedulerService } from './services/scheduler.js';
 import { GoogleAuthService } from './services/googleAuth.js';
-import { getVideoBlob } from './services/videoStore.js';
+import { getVideoBlob, saveVideoBlob } from './services/videoStore.js';
 
 class OmniFlowApp {
   constructor() {
@@ -2236,18 +2236,27 @@ class OmniFlowApp {
     const video = project.videos.find(v => v.id === videoId);
     if (!video) return;
 
+    let isLocalBlob = false;
     let playableUrl = video.videoUrl || video.downloadUrl || video.url || '';
-    if (video.source === 'Local Upload' || (playableUrl && playableUrl.startsWith('blob:'))) {
-      try {
-        const dbBlob = await getVideoBlob(videoId);
-        if (dbBlob) {
-          playableUrl = URL.createObjectURL(dbBlob);
-          video.videoUrl = playableUrl;
-        }
-      } catch (e) {
-        console.warn('Could not restore blob from IndexedDB:', e);
+    
+    // Check if video blob is already cached or local
+    try {
+      const dbBlob = await getVideoBlob(videoId);
+      if (dbBlob) {
+        playableUrl = URL.createObjectURL(dbBlob);
+        video.videoUrl = playableUrl;
+        isLocalBlob = true;
+      } else if (playableUrl && playableUrl.startsWith('blob:')) {
+        isLocalBlob = true;
       }
+    } catch (e) {
+      console.warn('Could not restore blob from IndexedDB:', e);
     }
+
+    const ytToken = GoogleAuthService.getYouTubeToken(project) || '';
+    const tokenParam = ytToken ? `&token=${encodeURIComponent(ytToken)}` : '';
+    const proxyStreamUrl = video.driveFileId ? `/api/drive/download?fileId=${encodeURIComponent(video.driveFileId)}${tokenParam}` : playableUrl;
+    const drivePreviewUrl = video.driveFileId ? `https://drive.google.com/file/d/${video.driveFileId}/preview` : null;
 
     this.openModal(`
       <div class="modal-backdrop">
@@ -2259,15 +2268,56 @@ class OmniFlowApp {
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body" style="padding:20px;">
-            <div style="display:grid; grid-template-columns: 280px 1fr; gap:20px;">
+            <div style="display:grid; grid-template-columns: 290px 1fr; gap:20px;">
               <div>
-                <div style="background:#000; border-radius:var(--radius-md); overflow:hidden; aspect-ratio:9/14; display:flex; align-items:center; justify-content:center;">
-                  <video src="${playableUrl}" controls autoplay muted playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+                <div style="background:#090d16; border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; aspect-ratio:9/14; position:relative; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 30px rgba(0,0,0,0.45);">
+                  ${isLocalBlob ? `
+                    <video id="modal-video-element" src="${playableUrl}" controls autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>
+                  ` : video.driveFileId ? `
+                    <div id="drive-player-wrapper" style="width:100%; height:100%; position:relative;">
+                      <iframe 
+                        id="modal-drive-iframe" 
+                        src="${drivePreviewUrl}" 
+                        style="width:100%; height:100%; border:none; display:block;" 
+                        allow="autoplay; fullscreen"
+                        allowfullscreen>
+                      </iframe>
+                      <video id="modal-video-element" src="${proxyStreamUrl}" controls playsinline style="width:100%; height:100%; object-fit:cover; display:none;"></video>
+                    </div>
+                  ` : `
+                    <video id="modal-video-element" src="${playableUrl}" controls autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; display:block;"></video>
+                  `}
                 </div>
-                <div style="display:flex; justify-content:space-between; margin-top:8px; font-size:0.75rem; color:var(--text-muted); font-weight:600;">
-                  <span>Duration: ${video.duration}</span>
-                  <span>Size: ${video.size}</span>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:0.75rem; color:var(--text-muted); font-weight:600;">
+                  <span>⏱️ ${video.duration || '0:30'}</span>
+                  ${video.driveFileId ? `
+                    <span id="player-source-badge" style="color:#10b981; display:inline-flex; align-items:center; gap:4px; font-size:0.72rem; background:rgba(16,185,129,0.1); padding:2px 6px; border-radius:4px; border:1px solid rgba(16,185,129,0.2);">
+                      <i data-lucide="cloud" style="width:12px; height:12px;"></i> Drive Stream
+                    </span>
+                  ` : `
+                    <span style="color:#6366f1; display:inline-flex; align-items:center; gap:4px; font-size:0.72rem; background:rgba(99,102,241,0.1); padding:2px 6px; border-radius:4px; border:1px solid rgba(99,102,241,0.2);">
+                      <i data-lucide="hard-drive" style="width:12px; height:12px;"></i> Local File
+                    </span>
+                  `}
+                  <span>💾 ${video.size || 'Video'}</span>
                 </div>
+
+                ${video.driveFileId && !isLocalBlob ? `
+                  <div style="display:flex; gap:6px; margin-top:8px;">
+                    <button class="btn btn-outline btn-xs" id="btn-toggle-player-mode" style="font-size:0.72rem; padding:4px 8px; flex:1; display:inline-flex; align-items:center; justify-content:center; gap:4px;">
+                      <i data-lucide="repeat" style="width:12px; height:12px;"></i>
+                      <span id="player-mode-text">HTML5 Player</span>
+                    </button>
+                    <button class="btn btn-outline btn-xs" id="btn-cache-drive-video" style="font-size:0.72rem; padding:4px 8px; display:inline-flex; align-items:center; gap:4px; color:#10b981; border-color:rgba(16,185,129,0.3);">
+                      <i data-lucide="download" style="width:12px; height:12px;"></i>
+                      <span id="cache-btn-text">Cache</span>
+                    </button>
+                    <a href="https://drive.google.com/file/d/${video.driveFileId}/view" target="_blank" class="btn btn-outline btn-xs" title="Open in Google Drive" style="font-size:0.72rem; padding:4px 8px; text-decoration:none; display:inline-flex; align-items:center; gap:4px; color:var(--text-muted);">
+                      <i data-lucide="external-link" style="width:12px; height:12px;"></i>
+                    </a>
+                  </div>
+                ` : ''}
               </div>
 
               <div style="display:flex; flex-direction:column;">
@@ -2299,6 +2349,85 @@ class OmniFlowApp {
         </div>
       </div>
     `);
+
+    // Player Mode Toggle & Fallback
+    const toggleBtn = document.getElementById('btn-toggle-player-mode');
+    const iframe = document.getElementById('modal-drive-iframe');
+    const videoEl = document.getElementById('modal-video-element');
+    const modeText = document.getElementById('player-mode-text');
+
+    if (toggleBtn && iframe && videoEl) {
+      let isShowingDrive = true;
+      toggleBtn.addEventListener('click', () => {
+        if (isShowingDrive) {
+          iframe.style.display = 'none';
+          videoEl.style.display = 'block';
+          videoEl.play().catch(() => {});
+          modeText.textContent = 'Drive Player';
+          this.showToast('HTML5 Player চালু করা হয়েছে', 'info');
+        } else {
+          videoEl.pause();
+          videoEl.style.display = 'none';
+          iframe.style.display = 'block';
+          modeText.textContent = 'HTML5 Player';
+          this.showToast('Google Drive Player চালু করা হয়েছে', 'info');
+        }
+        isShowingDrive = !isShowingDrive;
+      });
+
+      videoEl.addEventListener('error', () => {
+        if (!isShowingDrive) {
+          this.showToast('HTML5 প্লেয়ারে সমস্যা হয়েছে, Google Drive প্লেয়ার চালু করা হয়েছে', 'warning');
+          videoEl.style.display = 'none';
+          iframe.style.display = 'block';
+          modeText.textContent = 'HTML5 Player';
+          isShowingDrive = true;
+        }
+      });
+    }
+
+    // Video Local Cache Button
+    const cacheBtn = document.getElementById('btn-cache-drive-video');
+    const cacheText = document.getElementById('cache-btn-text');
+    if (cacheBtn && video.driveFileId) {
+      cacheBtn.addEventListener('click', async () => {
+        try {
+          cacheBtn.disabled = true;
+          cacheText.textContent = 'Caching...';
+          this.showToast('Google Drive থেকে ভিডিও ডাউনলোড ও ক্যাশ করা হচ্ছে...', 'info');
+
+          const r = await fetch(proxyStreamUrl);
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const blob = await r.blob();
+
+          await saveVideoBlob(videoId, blob);
+          video.fileReference = blob;
+          const blobUrl = URL.createObjectURL(blob);
+          video.videoUrl = blobUrl;
+
+          if (videoEl) {
+            videoEl.src = blobUrl;
+            videoEl.style.display = 'block';
+            if (iframe) iframe.style.display = 'none';
+            videoEl.play().catch(() => {});
+          }
+          if (modeText) modeText.textContent = 'Drive Player';
+          cacheText.textContent = 'Cached ✓';
+          cacheBtn.style.color = '#10b981';
+          const badge = document.getElementById('player-source-badge');
+          if (badge) {
+            badge.innerHTML = '<i data-lucide="hard-drive" style="width:12px; height:12px;"></i> Cached Offline';
+            this.refreshIcons();
+          }
+          this.showToast('ভিডিওটি সফলভাবে ক্যাশ করা হয়েছে এবং অফলাইনে প্লে হবে!', 'success');
+        } catch (err) {
+          console.error('Cache video error:', err);
+          cacheText.textContent = 'Retry Cache';
+          cacheBtn.disabled = false;
+          this.showToast('ক্যাশ ডাউনলোড ব্যর্থ হয়েছে: ' + err.message, 'error');
+        }
+      });
+    }
 
     document.getElementById('btn-save-video-details').addEventListener('click', () => {
       const newCaption = document.getElementById('modal-video-caption').value;

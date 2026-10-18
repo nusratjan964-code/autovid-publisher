@@ -167,7 +167,7 @@ export class SchedulerService {
   /**
    * Resolves binary Blob for a video from memory, IndexedDB, or URL
    */
-  static async resolveVideoBlob(video) {
+  static async resolveVideoBlob(video, project = null) {
     if (!video) return null;
     if (video.fileReference instanceof Blob) {
       return video.fileReference;
@@ -225,7 +225,14 @@ export class SchedulerService {
     // 3. Google Drive File ID via server-side download proxy
     if (video.driveFileId) {
       try {
-        const r = await fetch(`/api/drive/download?fileId=${encodeURIComponent(video.driveFileId)}`);
+        let authQuery = '';
+        if (project) {
+          try {
+            const ytToken = GoogleAuthService.getYouTubeToken(project);
+            if (ytToken) authQuery = `&token=${encodeURIComponent(ytToken)}`;
+          } catch (e) {}
+        }
+        const r = await fetch(`/api/drive/download?fileId=${encodeURIComponent(video.driveFileId)}${authQuery}`);
         if (r.ok) {
           const b = await r.blob();
           video.fileReference = b;
@@ -317,7 +324,7 @@ export class SchedulerService {
     await new Promise(r => setTimeout(r, 250));
 
     // Step 3: Resolve Binary Video File
-    let fileBlob = await this.resolveVideoBlob(video);
+    let fileBlob = await this.resolveVideoBlob(video, project);
 
     // If options.fileBlob was explicitly passed (e.g. from file picker modal)
     if (options.fileBlob instanceof Blob) {

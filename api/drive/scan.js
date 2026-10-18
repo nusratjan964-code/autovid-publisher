@@ -127,30 +127,39 @@ async function handleDriveDownload(req, res, queryParams) {
   }
 
   const cache = loadCache();
+  const token = inputToken || cache.youtube?.accessToken || (await getRefreshedToken(cache)) || '';
   const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
   const apiKey = queryParams.apiKey || cache.googleApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || DEFAULT_GOOGLE_API_KEY;
   const appReferer = req.headers['referer'] || req.headers['origin'] || 'https://autovid-publisher.vercel.app/';
 
-  console.log(`[Drive Download Proxy] Fetching Drive file ${fileId} (Has Token: ${!!token})...`);
+  console.log(`[Drive Download Proxy] Fetching Drive file ${fileId} (Has Token: ${!!token}, Has Key: ${!!apiKey})...`);
 
-  // Method 1: Google Drive API v3 alt=media
-  if (token) {
+  const reqRange = req.headers['range'];
+
+  // Method 1: Google Drive API v3 alt=media (Token or API Key)
+  if (token || apiKey) {
     try {
-      const driveApiUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
-      const apiRes = await fetch(driveApiUrl, {
-        headers: { 
-          'Referer': appReferer,
-          'Authorization': `Bearer ${token}` 
-        }
-      });
+      const keyParam = (!token && apiKey) ? `&key=${encodeURIComponent(apiKey)}` : '';
+      const driveApiUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media${keyParam}`;
+      const headers = { 
+        'Referer': appReferer,
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
+      if (reqRange) {
+        headers['Range'] = reqRange;
+      }
 
-      if (apiRes.ok) {
+      const apiRes = await fetch(driveApiUrl, { headers });
+
+      if (apiRes.ok || apiRes.status === 206) {
         const contentType = apiRes.headers.get('content-type') || 'video/mp4';
         const contentLength = apiRes.headers.get('content-length');
+        const contentRange = apiRes.headers.get('content-range');
 
-        res.statusCode = 200;
-        res.setHeader('Content-Type', contentType);
+        res.statusCode = apiRes.status;
+        res.setHeader('Content-Type', contentType.includes('html') ? 'video/mp4' : contentType);
         if (contentLength) res.setHeader('Content-Length', contentLength);
+        if (contentRange) res.setHeader('Content-Range', contentRange);
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Content-Disposition', `inline; filename="drive_video_${fileId}.mp4"`);
 
@@ -158,18 +167,23 @@ async function handleDriveDownload(req, res, queryParams) {
         return res.end(Buffer.from(arrayBuffer));
       }
     } catch (e) {
-      console.warn('[Drive Download Proxy] Token download error, trying direct export:', e.message);
+      console.warn('[Drive Download Proxy] Drive API download error, trying direct export:', e.message);
     }
   }
 
   // Method 2: Direct uc?export=download
   try {
     const ucUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
+    const ucHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*'
+    };
+    if (reqRange) {
+      ucHeaders['Range'] = reqRange;
+    }
+
     const ucRes = await fetch(ucUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*'
-      },
+      headers: ucHeaders,
       redirect: 'follow'
     });
 
@@ -183,21 +197,28 @@ async function handleDriveDownload(req, res, queryParams) {
         const confirmUrl = `https://drive.google.com/uc?export=download&id=${fileId}&confirm=${confirmToken}`;
         const cookies = ucRes.headers.get('set-cookie') || '';
 
+        const secondHeaders = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Cookie': cookies
+        };
+        if (reqRange) {
+          secondHeaders['Range'] = reqRange;
+        }
+
         const secondRes = await fetch(confirmUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Cookie': cookies
-          },
+          headers: secondHeaders,
           redirect: 'follow'
         });
 
-        if (secondRes.ok) {
+        if (secondRes.ok || secondRes.status === 206) {
           const secondType = secondRes.headers.get('content-type') || 'video/mp4';
           const secondLength = secondRes.headers.get('content-length');
+          const secondRange = secondRes.headers.get('content-range');
 
-          res.statusCode = 200;
+          res.statusCode = secondRes.status;
           res.setHeader('Content-Type', secondType.includes('html') ? 'video/mp4' : secondType);
           if (secondLength) res.setHeader('Content-Length', secondLength);
+          if (secondRange) res.setHeader('Content-Range', secondRange);
           res.setHeader('Accept-Ranges', 'bytes');
           res.setHeader('Content-Disposition', `inline; filename="drive_video_${fileId}.mp4"`);
 
@@ -217,11 +238,13 @@ async function handleDriveDownload(req, res, queryParams) {
       }
     }
 
-    if (ucRes.ok) {
+    if (ucRes.ok || ucRes.status === 206) {
       const contentLength = ucRes.headers.get('content-length');
-      res.statusCode = 200;
-      res.setHeader('Content-Type', contentType || 'video/mp4');
+      const contentRange = ucRes.headers.get('content-range');
+      res.statusCode = ucRes.status;
+      res.setHeader('Content-Type', contentType.includes('html') ? 'video/mp4' : (contentType || 'video/mp4'));
       if (contentLength) res.setHeader('Content-Length', contentLength);
+      if (contentRange) res.setHeader('Content-Range', contentRange);
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Disposition', `inline; filename="drive_video_${fileId}.mp4"`);
 
@@ -283,6 +306,7 @@ export default async function handler(req, res) {
     cache.googleApiKey = inputApiKey;
     saveCache(cache);
   }
+  const token = inputToken || cache.youtube?.accessToken || (await getRefreshedToken(cache)) || '';
   const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
   const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || cache.googleApiKey || DEFAULT_GOOGLE_API_KEY;
   const appReferer = req.headers['referer'] || req.headers['origin'] || 'https://autovid-publisher.vercel.app/';
