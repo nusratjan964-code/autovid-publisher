@@ -2,6 +2,9 @@
   "framework": "vite",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/drive/download", "destination": "/api/drive/scan?download=1" }
+  ],
   "crons": [
     {
       "path": "/api/cron",

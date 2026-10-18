@@ -1,4 +1,4 @@
-import { getPageAccessToken, getActivePageSanitized } from './credentials.js';
+import { getPageAccessToken, getActivePageSanitized } from '../../lib/facebookCredentials.js';
 
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');

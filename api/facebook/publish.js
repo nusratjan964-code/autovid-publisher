@@ -1,5 +1,5 @@
 import { isIdempotencyKeyProcessed, updateQueueItem } from '../queue.js';
-import { getPageAccessToken, getActivePageSanitized } from './credentials.js';
+import { getPageAccessToken, getActivePageSanitized } from '../../lib/facebookCredentials.js';
 
 const GRAPH_VERSION = 'v21.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
