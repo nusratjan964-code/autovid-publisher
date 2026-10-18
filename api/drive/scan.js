@@ -12,31 +12,97 @@ function loadCache() {
   return {};
 }
 
-function parseDriveUrl(rawUrl) {
-  if (!rawUrl || typeof rawUrl !== 'string') return null;
-  const url = rawUrl.trim();
+function saveCache(data) {
+  try {
+    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {}
+}
 
-  // Check if it's a direct file link
-  const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || 
-                    url.match(/open\?id=([a-zA-Z0-9_-]+)/) ||
-                    url.match(/uc\?id=([a-zA-Z0-9_-]+)/);
-  if (fileMatch) {
-    return { type: 'file', id: fileMatch[1], url };
+async function getRefreshedToken(cache) {
+  const yt = cache.youtube;
+  if (!yt || !yt.refreshToken) return yt?.accessToken || '';
+
+  try {
+    const clientId = process.env.VITE_GOOGLE_CLIENT_ID || cache.googleClientId || '';
+    const clientSecret = process.env.VITE_GOOGLE_CLIENT_SECRET || cache.googleClientSecret || '';
+
+    if (clientId && clientSecret) {
+      const res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: yt.refreshToken,
+          grant_type: 'refresh_token'
+        }).toString()
+      });
+
+      const data = await res.json();
+      if (res.ok && data.access_token) {
+        yt.accessToken = data.access_token;
+        yt.updatedAt = new Date().toISOString();
+        cache.youtube = yt;
+        saveCache(cache);
+        return data.access_token;
+      }
+    }
+  } catch (e) {
+    console.warn('[Drive Scanner] Token refresh notice:', e.message);
   }
 
-  // Check if it's a folder link
-  const folderMatch = url.match(/\/folders\/([a-zA-Z0-9_-]+)/) || 
-                      url.match(/id=([a-zA-Z0-9_-]+)/);
-  if (folderMatch) {
-    return { type: 'folder', id: folderMatch[1], url };
+  return yt?.accessToken || '';
+}
+
+function extractAllDriveTargets(rawInput) {
+  if (!rawInput) return [];
+  const text = Array.isArray(rawInput) ? rawInput.join('\n') : String(rawInput);
+  const targets = [];
+  const seenIds = new Set();
+
+  // 1. Match all file URLs
+  const fileRegexes = [
+    /\/file\/d\/([a-zA-Z0-9_-]{20,60})/g,
+    /open\?id=([a-zA-Z0-9_-]{20,60})/g,
+    /uc\?id=([a-zA-Z0-9_-]{20,60})/g,
+    /uc\?export=download&id=([a-zA-Z0-9_-]{20,60})/g
+  ];
+
+  for (const regex of fileRegexes) {
+    const matches = Array.from(text.matchAll(regex));
+    for (const m of matches) {
+      const id = m[1];
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        targets.push({ type: 'file', id, url: `https://drive.google.com/file/d/${id}/view` });
+      }
+    }
   }
 
-  // Raw ID check (typically 25-45 characters alphanumeric with - and _)
-  if (/^[a-zA-Z0-9_-]{25,50}$/.test(url)) {
-    return { type: 'unknown', id: url, url };
+  // 2. Match folder URLs
+  const folderRegexes = [
+    /\/folders\/([a-zA-Z0-9_-]{20,60})/g,
+    /drive\.google\.com\/.*[?&]id=([a-zA-Z0-9_-]{20,60})/g
+  ];
+
+  for (const regex of folderRegexes) {
+    const matches = Array.from(text.matchAll(regex));
+    for (const m of matches) {
+      const id = m[1];
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        targets.push({ type: 'folder', id, url: `https://drive.google.com/drive/folders/${id}` });
+      }
+    }
   }
 
-  return null;
+  // 3. Fallback: single raw ID
+  const trimmed = text.trim();
+  if (targets.length === 0 && /^[a-zA-Z0-9_-]{25,50}$/.test(trimmed)) {
+    targets.push({ type: 'unknown', id: trimmed, url: trimmed });
+  }
+
+  return targets;
 }
 
 export default async function handler(req, res) {
@@ -45,11 +111,11 @@ export default async function handler(req, res) {
   const queryParams = req.query || {};
   const bodyParams = req.body || {};
 
-  const inputUrl = (queryParams.url || bodyParams.url || queryParams.folderUrl || bodyParams.folderUrl || '').trim();
+  const inputRaw = queryParams.url || bodyParams.url || queryParams.folderUrl || bodyParams.folderUrl || bodyParams.urls || '';
   const inputApiKey = (queryParams.apiKey || bodyParams.apiKey || '').trim();
   const inputToken = (queryParams.token || bodyParams.token || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '').trim();
 
-  if (!inputUrl) {
+  if (!inputRaw || (typeof inputRaw === 'string' && !inputRaw.trim())) {
     return res.status(400).json({
       success: false,
       error: 'MISSING_URL',
@@ -57,8 +123,8 @@ export default async function handler(req, res) {
     });
   }
 
-  const parsed = parseDriveUrl(inputUrl);
-  if (!parsed) {
+  const targets = extractAllDriveTargets(inputRaw);
+  if (targets.length === 0) {
     return res.status(400).json({
       success: false,
       error: 'INVALID_URL',
@@ -67,90 +133,85 @@ export default async function handler(req, res) {
   }
 
   const cache = loadCache();
-  const token = inputToken || cache.youtube?.accessToken || '';
-  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+  let token = inputToken || await getRefreshedToken(cache);
+  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || '';
 
-  console.log(`[Drive Scanner] Scanning Drive target (${parsed.type}): ${parsed.id} (Has Token: ${!!token}, Has Key: ${!!apiKey})...`);
+  console.log(`[Drive Scanner] Found ${targets.length} targets to process (Token: ${!!token}, Key: ${!!apiKey})`);
 
-  // --- SCENARIO 1: SINGLE FILE LINK ---
-  if (parsed.type === 'file') {
-    const fileId = parsed.id;
+  // --- SCENARIO A: BATCH OF FILES OR SINGLE FILE(S) ---
+  const fileTargets = targets.filter(t => t.type === 'file');
+  const folderTargets = targets.filter(t => t.type === 'folder' || t.type === 'unknown');
 
-    // Try fetching official metadata if credentials available
-    if (token || apiKey) {
-      try {
-        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-        const keyQuery = apiKey ? `&key=${apiKey}` : '';
-        const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink${keyQuery}`, {
-          headers
-        });
+  const allFoundVideos = [];
 
-        if (metaRes.ok) {
-          const file = await metaRes.json();
-          const durationMillis = file.videoMediaMetadata?.durationMillis;
-          let durationFormatted = '0:30';
-          if (durationMillis) {
-            const totalSec = Math.floor(durationMillis / 1000);
-            durationFormatted = `${Math.floor(totalSec / 60)}:${(totalSec % 60).toString().padStart(2, '0')}`;
+  // Process all direct file links first
+  if (fileTargets.length > 0) {
+    for (let i = 0; i < fileTargets.length; i++) {
+      const fileTarget = fileTargets[i];
+      const fileId = fileTarget.id;
+
+      let videoObj = {
+        id: `vid_gdrive_${fileId}`,
+        title: `Google Drive Video ${fileTargets.length > 1 ? (i + 1) : ''}`.trim(),
+        duration: '0:30',
+        size: 'Cloud Video',
+        videoUrl: `/api/drive/download?fileId=${fileId}`,
+        directDownloadUrl: `https://drive.google.com/uc?id=${fileId}&export=download`,
+        thumbnailUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
+        status: 'ready',
+        source: 'Google Drive',
+        driveFileId: fileId
+      };
+
+      // Try metadata enrichment if credentials available
+      if (token || apiKey) {
+        try {
+          const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+          const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
+          const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,videoMediaMetadata,thumbnailLink${keyParam}`, { headers });
+          if (metaRes.ok) {
+            const meta = await metaRes.json();
+            videoObj.title = meta.name || videoObj.title;
+            if (meta.size) {
+              videoObj.size = `${(meta.size / (1024 * 1024)).toFixed(1)} MB`;
+            }
+            if (meta.thumbnailLink) {
+              videoObj.thumbnailUrl = meta.thumbnailLink;
+            }
+            if (meta.videoMediaMetadata?.durationMillis) {
+              const sec = Math.floor(meta.videoMediaMetadata.durationMillis / 1000);
+              videoObj.duration = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
+            }
           }
-
-          const video = {
-            id: `vid_gdrive_${file.id}`,
-            title: file.name || 'Google Drive Video',
-            duration: durationFormatted,
-            size: file.size ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'Cloud Video',
-            videoUrl: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`,
-            thumbnailUrl: file.thumbnailLink || `https://drive.google.com/thumbnail?id=${file.id}&sz=w600`,
-            status: 'ready',
-            source: 'Google Drive',
-            driveFileId: file.id
-          };
-
-          return res.status(200).json({
-            success: true,
-            type: 'file',
-            videos: [video],
-            count: 1,
-            message: `১টি ভিডিও ফাইল ("${video.title}") সফলভাবে লোড হয়েছে!`
-          });
-        }
-      } catch (e) {
-        console.warn('[Drive Scanner] Single file metadata note:', e.message);
+        } catch (e) {}
       }
+
+      allFoundVideos.push(videoObj);
     }
 
-    // Direct fallback for individual files
-    const fallbackVideo = {
-      id: `vid_gdrive_${fileId}`,
-      title: 'Google Drive Video',
-      duration: '0:30',
-      size: 'Cloud Video',
-      videoUrl: `https://drive.google.com/uc?id=${fileId}&export=download`,
-      thumbnailUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
-      status: 'ready',
-      source: 'Google Drive',
-      driveFileId: fileId
-    };
-
-    return res.status(200).json({
-      success: true,
-      type: 'file',
-      videos: [fallbackVideo],
-      count: 1,
-      message: 'গুগল ড্রাইভ ভিডিও ফাইল সফলভাবে লোড হয়েছে!'
-    });
+    if (folderTargets.length === 0) {
+      return res.status(200).json({
+        success: true,
+        type: 'file',
+        videos: allFoundVideos,
+        count: allFoundVideos.length,
+        message: `${allFoundVideos.length}টি Google Drive ভিডিও ফাইল সফলভাবে লোড হয়েছে!`
+      });
+    }
   }
 
-  // --- SCENARIO 2: FOLDER LINK ---
-  const folderId = parsed.id;
+  // --- SCENARIO B: FOLDER TARGET ---
+  const mainFolderTarget = folderTargets[0];
+  const folderId = mainFolderTarget.id;
+  const folderShareUrl = `https://drive.google.com/drive/folders/${folderId}`;
 
-  // 1. Attempt API v3 via OAuth Token or API Key
+  // 1. Query Official Google Drive API v3 (if Token or API key is present)
   if (token || apiKey) {
     try {
       const q = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.webm' or name contains '.mkv') and trashed = false`);
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-      const keyQuery = apiKey ? `&key=${apiKey}` : '';
-      const driveApiUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)&key=${keyQuery ? apiKey : ''}`;
+      const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
+      const driveApiUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}`;
 
       const apiRes = await fetch(driveApiUrl, { headers });
       if (apiRes.ok) {
@@ -158,7 +219,7 @@ export default async function handler(req, res) {
         const files = data.files || [];
 
         if (files.length > 0) {
-          const videos = files.map(file => {
+          const folderVideos = files.map(file => {
             const durationMillis = file.videoMediaMetadata?.durationMillis;
             let durationFormatted = '0:30';
             if (durationMillis) {
@@ -171,7 +232,8 @@ export default async function handler(req, res) {
               title: file.name,
               duration: durationFormatted,
               size: file.size ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : 'Cloud Video',
-              videoUrl: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`,
+              videoUrl: `/api/drive/download?fileId=${file.id}`,
+              directDownloadUrl: file.webContentLink || `https://drive.google.com/uc?id=${file.id}&export=download`,
               thumbnailUrl: file.thumbnailLink || `https://drive.google.com/thumbnail?id=${file.id}&sz=w600`,
               status: 'ready',
               source: 'Google Drive',
@@ -179,18 +241,21 @@ export default async function handler(req, res) {
             };
           });
 
+          const combined = [...allFoundVideos, ...folderVideos];
           return res.status(200).json({
             success: true,
             folderId,
-            videos,
-            count: videos.length,
-            message: `গুগল ড্রাইভ ফোল্ডার থেকে ${videos.length}টি ভিডিও ফাইল পাওয়া গেছে!`
+            folderUrl: folderShareUrl,
+            videos: combined,
+            count: combined.length,
+            message: `গুগল ড্রাইভ ফোল্ডার থেকে ${combined.length}টি ভিডিও ফাইল পাওয়া গেছে!`
           });
         } else {
           return res.status(404).json({
             success: false,
             error: 'EMPTY_FOLDER',
-            message: 'এই Google Drive ফোল্ডারে কোনো ভিডিও ফাইল (.mp4, .mov, .webm) পাওয়া যায়নি। ফোল্ডারে ভিডিও আছে কিনা নিশ্চিত করুন।'
+            folderUrl: folderShareUrl,
+            message: 'এই Google Drive ফোল্ডারে কোনো ভিডিও ফাইল (.mp4, .mov, .webm) পাওয়া যায়নি। অনুগ্রহ করে নিশ্চিত করুন ফোল্ডারে ভিডিও ফাইল রয়েছে।'
           });
         }
       } else {
@@ -202,10 +267,9 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. Attempt Public HTML Parsing (for shared folders without API key)
+  // 2. Query Public Shared Folder (Scrape initial payload for public folders)
   try {
-    const publicFolderUrl = `https://drive.google.com/drive/folders/${folderId}`;
-    const pageRes = await fetch(publicFolderUrl, {
+    const pageRes = await fetch(folderShareUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -215,31 +279,32 @@ export default async function handler(req, res) {
 
     if (pageRes.ok) {
       const html = await pageRes.text();
-
-      // Find file references in initial data
       const idMatches = Array.from(html.matchAll(/\/file\/d\/([a-zA-Z0-9_-]{25,50})/g)).map(m => m[1]);
       const uniqueIds = Array.from(new Set(idMatches));
 
       if (uniqueIds.length > 0) {
-        console.log(`[Drive Scanner] Found ${uniqueIds.length} files via public folder scraping`);
+        console.log(`[Drive Scanner] Found ${uniqueIds.length} files via public scraping`);
         const scrapedVideos = uniqueIds.map((fId, idx) => ({
           id: `vid_gdrive_${fId}`,
           title: `Drive Video ${idx + 1}`,
           duration: '0:30',
           size: 'Cloud Video',
-          videoUrl: `https://drive.google.com/uc?id=${fId}&export=download`,
+          videoUrl: `/api/drive/download?fileId=${fId}`,
+          directDownloadUrl: `https://drive.google.com/uc?id=${fId}&export=download`,
           thumbnailUrl: `https://drive.google.com/thumbnail?id=${fId}&sz=w600`,
           status: 'ready',
           source: 'Google Drive',
           driveFileId: fId
         }));
 
+        const combined = [...allFoundVideos, ...scrapedVideos];
         return res.status(200).json({
           success: true,
           folderId,
-          videos: scrapedVideos,
-          count: scrapedVideos.length,
-          message: `Google Drive থেকে ${scrapedVideos.length}টি ভিডিও সফলভাবে লোড হয়েছে!`
+          folderUrl: folderShareUrl,
+          videos: combined,
+          count: combined.length,
+          message: `Google Drive থেকে ${combined.length}টি ভিডিও সফলভাবে লোড হয়েছে!`
         });
       }
     }
@@ -247,16 +312,28 @@ export default async function handler(req, res) {
     console.warn('[Drive Scanner] Public scraping note:', scrapeErr.message);
   }
 
-  // 3. Folder is restricted or credentials required
+  // If we already had direct video files parsed from input, return them!
+  if (allFoundVideos.length > 0) {
+    return res.status(200).json({
+      success: true,
+      videos: allFoundVideos,
+      count: allFoundVideos.length,
+      message: `${allFoundVideos.length}টি ভিডিও ফাইল সফলভাবে লোড হয়েছে!`
+    });
+  }
+
+  // 3. Folder is restricted or requires permission
   return res.status(403).json({
     success: false,
     error: 'ACCESS_RESTRICTED',
     folderId,
-    message: 'Google Drive ফোল্ডারটি বর্তমানে Restricted / Private রয়েছে অথবা পারমিশন দেওয়া নেই।',
+    folderUrl: folderShareUrl,
+    message: 'Google Drive ফোল্ডারটি বর্তমানে Restricted / Private রয়েছে।',
     solutions: [
-      '১. ফোল্ডারের এক্সেস পরিবর্তন করুন: Google Drive-এ ফোল্ডারে রাইট-ক্লিক করে Share > General access-এ "Anyone with the link can view" (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) সিলেক্ট করুন।',
-      '২. অথবা "1-Click Connect Google Drive" বাটনে ক্লিক করে আপনার Google একাউন্ট অনুমোদিত করুন।',
-      '৩. অথবা সরাসরি আপনার কম্পিউটার থেকে নিচে ভিডিও ফাইল সিলেক্ট / ড্রপ করুন।'
+      `১. ফোল্ডারটির শেয়ার পারমিশন পরিবর্তন করুন: নিচের "Open Folder in Google Drive" বাটনে ক্লিক করে Share > General access-এ "Anyone with the link" (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) সিলেক্ট করুন।`,
+      `২. অথবা সরাসরি ভিডিও ফাইলের লিংকগুলো (/file/d/...) কপি করে পেস্ট করুন।`,
+      `৩. অথবা আপনার গুগল একাউন্টটি রি-অথোরাইজ (Re-Authorize) করুন।`,
+      `৪. অথবা সরাসরি আপনার কম্পিউটার থেকে নিচে ড্রপজোনে ভিডিও সিলেক্ট করুন।`
     ]
   });
 }

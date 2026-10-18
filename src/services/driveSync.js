@@ -9,25 +9,25 @@ export class DriveSyncService {
     if (!url || typeof url !== 'string') return { valid: false, error: 'Please enter a Google Drive URL.' };
     const trimmed = url.trim();
 
-    // Check if it's a direct file link
-    const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || 
-                      trimmed.match(/open\?id=([a-zA-Z0-9_-]+)/) ||
-                      trimmed.match(/uc\?id=([a-zA-Z0-9_-]+)/);
-    if (fileMatch) {
-      return { valid: true, type: 'file', id: fileMatch[1], fileId: fileMatch[1], folderId: fileMatch[1], url: trimmed };
-    }
+    // Check if it contains any drive file or folder patterns
+    const hasDrivePattern = trimmed.includes('/file/d/') || 
+                           trimmed.includes('/folders/') || 
+                           trimmed.includes('open?id=') || 
+                           trimmed.includes('uc?id=') || 
+                           trimmed.includes('drive.google.com') ||
+                           /^[a-zA-Z0-9_-]{25,50}$/.test(trimmed);
 
-    // Check if it's a folder link
-    const isDriveDomain = trimmed.includes('drive.google.com');
-    const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/) || trimmed.match(/id=([a-zA-Z0-9_-]+)/);
-
-    if (folderMatch) {
-      return { valid: true, type: 'folder', id: folderMatch[1], folderId: folderMatch[1], url: trimmed };
-    }
-
-    // Direct ID check
-    if (/^[a-zA-Z0-9_-]{25,50}$/.test(trimmed)) {
-      return { valid: true, type: 'unknown', id: trimmed, folderId: trimmed, url: trimmed };
+    if (hasDrivePattern) {
+      const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+      const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || trimmed.match(/open\?id=([a-zA-Z0-9_-]+)/) || trimmed.match(/uc\?id=([a-zA-Z0-9_-]+)/);
+      const id = folderMatch ? folderMatch[1] : (fileMatch ? fileMatch[1] : (trimmed.match(/^[a-zA-Z0-9_-]{25,50}$/) ? trimmed : 'batch'));
+      return { 
+        valid: true, 
+        type: folderMatch ? 'folder' : (fileMatch ? 'file' : 'batch'), 
+        id, 
+        folderId: id, 
+        url: trimmed 
+      };
     }
 
     return {
@@ -37,7 +37,7 @@ export class DriveSyncService {
   }
 
   /**
-   * Scans a Google Drive folder or imports single video file.
+   * Scans a Google Drive folder or imports video files.
    * Utilizes server endpoint /api/drive/scan, Google OAuth token, and API key.
    */
   static async scanDriveFolder(folderUrl, options = {}) {
@@ -79,7 +79,7 @@ export class DriveSyncService {
         return {
           success: true,
           folderName: scanData.type === 'file' ? 'Google Drive Video' : `Drive Folder (${validation.id.substring(0, 8)}...)`,
-          folderUrl,
+          folderUrl: scanData.folderUrl || folderUrl,
           videos: scanData.videos,
           count: scanData.videos.length,
           message: scanData.message
@@ -87,12 +87,13 @@ export class DriveSyncService {
       }
 
       if (scanData.error === 'ACCESS_RESTRICTED') {
-        const solutionsText = scanData.solutions ? scanData.solutions.join('\n') : '';
         return {
           success: false,
           error: 'ACCESS_RESTRICTED',
-          message: `${scanData.message}\n\n${solutionsText}`,
-          solutions: scanData.solutions
+          folderId: scanData.folderId || validation.id,
+          folderUrl: scanData.folderUrl || `https://drive.google.com/drive/folders/${scanData.folderId || validation.id}`,
+          message: scanData.message || 'Google Drive ফোল্ডারটি বর্তমানে Restricted / Private রয়েছে।',
+          solutions: scanData.solutions || []
         };
       }
 
@@ -100,7 +101,10 @@ export class DriveSyncService {
         return {
           success: false,
           error: scanData.error || 'SCAN_ERROR',
-          message: scanData.message
+          folderId: scanData.folderId || validation.id,
+          folderUrl: scanData.folderUrl || folderUrl,
+          message: scanData.message,
+          solutions: scanData.solutions || []
         };
       }
     } catch (serverErr) {
@@ -115,7 +119,8 @@ export class DriveSyncService {
         title: 'Google Drive Video',
         duration: '0:30',
         size: 'Cloud Video',
-        videoUrl: `https://drive.google.com/uc?id=${fileId}&export=download`,
+        videoUrl: `/api/drive/download?fileId=${fileId}`,
+        directDownloadUrl: `https://drive.google.com/uc?id=${fileId}&export=download`,
         thumbnailUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
         status: 'ready',
         source: 'Google Drive',

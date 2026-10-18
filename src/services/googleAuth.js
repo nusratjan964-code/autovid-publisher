@@ -51,6 +51,10 @@ export class GoogleAuthService {
             return;
           }
           if (onSuccess) onSuccess(tokenResponse);
+        },
+        error_callback: (err) => {
+          console.warn('Google Token Client error_callback:', err);
+          if (onError) onError(new Error(err?.message || err?.type || 'Google popup was closed or blocked'));
         }
       });
       return true;
@@ -66,103 +70,88 @@ export class GoogleAuthService {
    */
   static connectYouTubeChannel(project) {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error('Google Authorization window was closed or timed out. If popup was blocked, please allow popups or use direct token/share settings.'));
+      }, 35000);
+
+      const safeResolve = (val) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(val);
+      };
+
+      const safeReject = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        reject(err);
+      };
+
       const clientId = this.getClientId();
       if (!clientId) {
-        reject(new Error('Google Client ID is missing. Please save your Client ID in settings.'));
+        safeReject(new Error('Google Client ID is missing. Please save your Client ID in settings.'));
         return;
       }
 
       const executeFlow = () => {
-        // Preferred Method: initCodeClient with 'postmessage' (No redirect URI mismatch error)
-        if (window.google?.accounts?.oauth2?.initCodeClient) {
-          try {
-            console.log('[GoogleAuth] Initializing Google Code Client...');
-            const codeClient = window.google.accounts.oauth2.initCodeClient({
-              client_id: clientId,
-              scope: [
-                'https://www.googleapis.com/auth/youtube.upload',
-                'https://www.googleapis.com/auth/youtube.readonly',
-                'https://www.googleapis.com/auth/drive.readonly',
-                'https://www.googleapis.com/auth/userinfo.profile'
-              ].join(' '),
-              ux_mode: 'popup',
-              callback: async (response) => {
-                if (response.error) {
-                  console.error('Google Code Flow error:', response);
-                  reject(new Error(response.error_description || response.error));
-                  return;
-                }
-                if (response.code) {
-                  try {
-                    console.log('[GoogleAuth] Received authorization code. Exchanging via backend...');
-                    const tokenRes = await fetch('/api/youtube/token', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ code: response.code })
-                    });
-                    const tokenData = await tokenRes.json();
-                    if (!tokenRes.ok || !tokenData.success) {
-                      throw new Error(tokenData.error || 'Failed to exchange authorization code');
+        // Method 1: Try Token Flow first for Drive & YouTube upload
+        try {
+          this.executeTokenFlow(project, safeResolve, safeReject);
+        } catch (tokenErr) {
+          console.warn('[GoogleAuth] Token client notice, trying code flow:', tokenErr);
+          // Fallback: initCodeClient
+          if (window.google?.accounts?.oauth2?.initCodeClient) {
+            try {
+              const codeClient = window.google.accounts.oauth2.initCodeClient({
+                client_id: clientId,
+                scope: [
+                  'https://www.googleapis.com/auth/youtube.upload',
+                  'https://www.googleapis.com/auth/youtube.readonly',
+                  'https://www.googleapis.com/auth/drive.readonly',
+                  'https://www.googleapis.com/auth/userinfo.profile'
+                ].join(' '),
+                ux_mode: 'popup',
+                callback: async (response) => {
+                  if (response.error) {
+                    safeReject(new Error(response.error_description || response.error));
+                    return;
+                  }
+                  if (response.code) {
+                    try {
+                      const tokenRes = await fetch('/api/youtube/token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code: response.code })
+                      });
+                      const tokenData = await tokenRes.json();
+                      if (!tokenRes.ok || !tokenData.success) {
+                        throw new Error(tokenData.error || 'Failed to exchange authorization code');
+                      }
+
+                      this.setYouTubeToken(project, tokenData.accessToken);
+                      storage.saveState();
+                      safeResolve({
+                        success: true,
+                        accessToken: tokenData.accessToken
+                      });
+                    } catch (exchangeErr) {
+                      safeReject(exchangeErr);
                     }
-
-                    this.setYouTubeToken(project, tokenData.accessToken);
-                    const channel = tokenData.channel || {
-                      id: 'UCCOo5jxEtLRgJQukBMnt-QQ',
-                      title: 'chiku bd',
-                      customUrl: '@chikubd'
-                    };
-
-                    let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
-                    if (!ytAccount) {
-                      ytAccount = {
-                        id: 'youtube',
-                        name: 'YouTube Shorts',
-                        icon: 'youtube',
-                        color: '#FF0000',
-                        handle: channel.customUrl || '@chikubd',
-                        connected: true,
-                        active: true
-                      };
-                      project.socialAccounts.push(ytAccount);
-                    }
-
-                    ytAccount.connected = true;
-                    ytAccount.active = true;
-                    ytAccount.channelId = channel.id;
-                    ytAccount.channelTitle = channel.title;
-                    ytAccount.handle = channel.customUrl || channel.title;
-                    if (channel.avatar) ytAccount.avatar = channel.avatar;
-                    ytAccount.accessToken = tokenData.accessToken;
-                    ytAccount.token = tokenData.accessToken;
-                    ytAccount.lastPost = 'Ready';
-
-                    if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
-                      project.scheduleSettings.targetPlatforms.push('youtube');
-                    }
-
-                    storage.saveState();
-                    resolve({
-                      success: true,
-                      channel,
-                      accessToken: tokenData.accessToken
-                    });
-                  } catch (exchangeErr) {
-                    console.error('[GoogleAuth] Exchange error:', exchangeErr);
-                    reject(exchangeErr);
                   }
                 }
-              }
-            });
-
-            codeClient.requestCode();
-            return;
-          } catch (codeErr) {
-            console.warn('[GoogleAuth] initCodeClient notice, trying fallback token client:', codeErr);
+              });
+              codeClient.requestCode();
+            } catch (err) {
+              safeReject(err);
+            }
+          } else {
+            safeReject(tokenErr);
           }
         }
-
-        // Fallback Method: initTokenClient
-        this.executeTokenFlow(project, resolve, reject);
       };
 
       if (!this.isGoogleLoaded()) {
@@ -176,7 +165,7 @@ export class GoogleAuthService {
         setTimeout(() => {
           clearInterval(checkInterval);
           if (!this.isGoogleLoaded()) {
-            reject(new Error('Google Identity Services script did not load. Please check your connection.'));
+            safeReject(new Error('Google Identity Services script did not load. Please check your connection.'));
           }
         }, 4000);
         return;

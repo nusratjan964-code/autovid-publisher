@@ -571,11 +571,21 @@ class OmniFlowApp {
           </div>
           <button class="btn btn-outline btn-sm" id="btn-auth-drive-google" style="font-size:0.78rem; gap:6px; border-color:#4285F4; color:#4285F4;">
             <i data-lucide="key"></i>
-            <span>${hasGoogleAuth ? 'Re-Authorize Google' : '1-Click Connect Google Account'}</span>
+            <span>${hasGoogleAuth ? 'Google Account & Token Settings' : '1-Click Connect Google Account'}</span>
           </button>
         </div>
 
-        <div style="display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
+        <!-- Mode Switcher Tabs -->
+        <div style="display:flex; gap:8px; margin-bottom:12px; border-bottom:1px solid var(--border-light); padding-bottom:8px;">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-tab-single-link" style="font-size:0.8rem; gap:6px;">
+            <i data-lucide="link"></i> <span>ফোল্ডার বা ফাইল লিংক (Single Link)</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" id="btn-tab-batch-links" style="font-size:0.8rem; gap:6px;">
+            <i data-lucide="layers"></i> <span>একাধিক ভিডিও লিংক (Batch Paste)</span>
+          </button>
+        </div>
+
+        <div id="drive-single-input-section" style="display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap;">
           <input 
             type="url" 
             class="form-input" 
@@ -590,12 +600,29 @@ class OmniFlowApp {
           </button>
         </div>
 
+        <div id="drive-batch-input-section" style="display:none; margin-bottom:14px;">
+          <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:6px;">
+            Google Drive এর একাধিক ভিডিও লিংক এখানে পেস্ট করুন (প্রতি লাইনে একটি করে লিংক):
+          </p>
+          <textarea 
+            class="form-input" 
+            id="input-drive-batch" 
+            rows="4" 
+            style="font-family:monospace; font-size:0.82rem; margin-bottom:10px; width:100%;" 
+            placeholder="https://drive.google.com/file/d/1.../view&#10;https://drive.google.com/file/d/2.../view&#10;https://drive.google.com/file/d/3.../view"
+          ></textarea>
+          <button class="btn btn-primary" id="btn-sync-batch-action" style="padding:10px 20px; font-weight:600;">
+            <i data-lucide="download-cloud"></i>
+            <span>ভিডিও লিংকগুলো লোড করুন (Import Batch Videos)</span>
+          </button>
+        </div>
+
         <div style="background:rgba(59, 130, 246, 0.05); border:1px solid rgba(59, 130, 246, 0.2); border-radius:var(--radius-md); padding:10px 14px; font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">
-          <strong>💡 গুগল ড্রাইভ থেকে ভিডিও লোড করার নির্দেশিকা:</strong>
+          <strong>💡 গুগল ড্রাইভ থেকে ভিডিও সহজে লোড করার ৩টি সহজ উপায়:</strong>
           <ul style="margin:4px 0 0; padding-left:18px;">
-            <li>ফোল্ডারের পারমিশন <strong>"Anyone with the link can view"</strong> (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) রাখলে পাসওয়ার্ড বা কী ছাড়াই নিমেষেই ভিডিও স্ক্যান হবে।</li>
-            <li>যদি ফোল্ডারটি প্রাইভেট থাকে, তবে উপরের <strong>"1-Click Connect Google Account"</strong> বাটন দিয়ে পারমিশন দিন।</li>
-            <li>ফোল্ডার লিংক ছাড়াও আপনি যেকোনো ভিডিও ফাইলের লিংক (<code>/file/d/...</code>) সরাসরি পেস্ট করতে পারেন।</li>
+            <li><strong>উপায় ১ (সবচেয়ে সহজ):</strong> ফোল্ডারের পারমিশন <strong>"Anyone with the link can view"</strong> (যে কেউ লিংকের মাধ্যমে দেখতে পাবে) রাখলে ১-ক্লিকেই ফোল্ডারের সব ভিডিও লোড হয়ে যাবে।</li>
+            <li><strong>উপায় ২:</strong> "একাধিক ভিডিও লিংক" ট্যাবে ক্লিক করে আপনার Google Drive ভিডিও ফাইলগুলোর লিংক একসাথে পেস্ট করে সরাসরি ইমপোর্ট করুন।</li>
+            <li><strong>উপায় ৩:</strong> নিচের ড্রপজোন থেকে আপনার কম্পিউটার বা Google Drive Desktop ফোল্ডার থেকে সরাসরি ভিডিও ফাইল সিলেক্ট করুন।</li>
           </ul>
         </div>
       </div>
@@ -2215,26 +2242,48 @@ class OmniFlowApp {
     });
 
     // Drive Sync Events
+    const tabSingle = document.getElementById('btn-tab-single-link');
+    const tabBatch = document.getElementById('btn-tab-batch-links');
+    const secSingle = document.getElementById('drive-single-input-section');
+    const secBatch = document.getElementById('drive-batch-input-section');
+
+    if (tabSingle && tabBatch && secSingle && secBatch) {
+      tabSingle.addEventListener('click', () => {
+        tabSingle.classList.remove('btn-outline');
+        tabSingle.classList.add('btn-primary');
+        tabBatch.classList.remove('btn-primary');
+        tabBatch.classList.add('btn-outline');
+        secSingle.style.display = 'flex';
+        secBatch.style.display = 'none';
+      });
+
+      tabBatch.addEventListener('click', () => {
+        tabBatch.classList.remove('btn-outline');
+        tabBatch.classList.add('btn-primary');
+        tabSingle.classList.remove('btn-primary');
+        tabSingle.classList.add('btn-outline');
+        secSingle.style.display = 'none';
+        secBatch.style.display = 'block';
+      });
+    }
+
     const syncDriveBtn = document.getElementById('btn-sync-drive-action');
     if (syncDriveBtn) {
       syncDriveBtn.addEventListener('click', () => this.syncDriveFromCurrentInput());
     }
 
+    const syncBatchBtn = document.getElementById('btn-sync-batch-action');
+    if (syncBatchBtn) {
+      syncBatchBtn.addEventListener('click', () => {
+        const batchVal = document.getElementById('input-drive-batch')?.value || '';
+        this.syncDriveFromCurrentInput(batchVal);
+      });
+    }
+
     const authDriveBtn = document.getElementById('btn-auth-drive-google');
     if (authDriveBtn) {
-      authDriveBtn.addEventListener('click', async () => {
-        try {
-          authDriveBtn.disabled = true;
-          authDriveBtn.innerText = 'Connecting Google Drive...';
-          const project = storage.getActiveProject();
-          await GoogleAuthService.connectYouTubeChannel(project);
-          this.showToast('Google Account Connected for Drive & YouTube!', 'success');
-          this.render();
-        } catch (err) {
-          alert(`Google Authorization: ${err.message}`);
-        } finally {
-          authDriveBtn.disabled = false;
-        }
+      authDriveBtn.addEventListener('click', () => {
+        this.openYouTubeOAuthModal({ id: 'youtube', name: 'YouTube Shorts & Google Drive' });
       });
     }
 
@@ -2404,12 +2453,14 @@ class OmniFlowApp {
   }
 
   // --- DRIVE SYNC LOGIC ---
-  async syncDriveFromCurrentInput() {
-    const input = document.getElementById('input-drive-url');
+  async syncDriveFromCurrentInput(customUrl = null) {
+    const singleInput = document.getElementById('input-drive-url');
+    const batchInput = document.getElementById('input-drive-batch');
     const alertContainer = document.getElementById('drive-alert-container');
     const syncBtn = document.getElementById('btn-sync-drive-action');
+    const batchBtn = document.getElementById('btn-sync-batch-action');
 
-    const url = input ? input.value.trim() : '';
+    let url = (customUrl || (batchInput && batchInput.value.trim()) || (singleInput ? singleInput.value.trim() : '')).trim();
 
     if (!url) {
       if (alertContainer) {
@@ -2418,7 +2469,7 @@ class OmniFlowApp {
             <i data-lucide="alert-triangle"></i>
             <div class="alert-content">
               <h4>Missing Google Drive Link</h4>
-              <p>Please paste your Google Drive folder link in the field above.</p>
+              <p>অনুগ্রহ করে Google Drive এর ফোল্ডার বা ভিডিও ফাইল লিংক দিন।</p>
             </div>
           </div>
         `;
@@ -2427,9 +2478,10 @@ class OmniFlowApp {
       return;
     }
 
-    if (syncBtn) {
-      syncBtn.disabled = true;
-      syncBtn.innerHTML = '<i data-lucide="refresh-cw"></i> Scanning Folder...';
+    const activeBtn = syncBtn || batchBtn;
+    if (activeBtn) {
+      activeBtn.disabled = true;
+      activeBtn.innerHTML = '<i data-lucide="refresh-cw" class="spin"></i> Scanning Drive...';
       createIcons({ icons });
     }
 
@@ -2439,23 +2491,41 @@ class OmniFlowApp {
 
     const scanResult = await DriveSyncService.scanDriveFolder(url, { apiKey, token, project });
 
-    if (syncBtn) {
-      syncBtn.disabled = false;
-      syncBtn.innerHTML = '<i data-lucide="refresh-cw"></i> Sync Drive Link';
+    if (activeBtn) {
+      activeBtn.disabled = false;
+      activeBtn.innerHTML = '<i data-lucide="refresh-cw"></i> Sync Drive Link';
       createIcons({ icons });
     }
 
-    // Honest error / empty feedback (as requested!)
+    // Handle scan error or restricted folder
     if (!scanResult.success) {
       if (alertContainer) {
-        const solutionsHtml = scanResult.solutions && scanResult.solutions.length ? `
-          <div style="background: rgba(239, 68, 68, 0.08); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px 14px; margin-top: 10px;">
-            <div style="font-size: 13px; font-weight: 700; color: #ef4444; margin-bottom: 6px;">💡 সহজ সমাধানসমূহ (How to fix):</div>
-            <ol style="margin: 0; padding-left: 20px; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary);">
-              ${scanResult.solutions.map(s => `<li>${s}</li>`).join('')}
-            </ol>
+        const folderUrl = scanResult.folderUrl || url;
+        const openDriveBtn = (folderUrl && folderUrl.includes('drive.google.com')) ? `
+          <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
+            <a href="${folderUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="background:#4285F4; border-color:#4285F4; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+              <i data-lucide="external-link"></i>
+              <span>Google Drive-এ এই ফোল্ডারটি ওপেন করুন (Open in Drive)</span>
+            </a>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-drive-retry-action" style="display:inline-flex; align-items:center; gap:6px;">
+              <i data-lucide="refresh-cw"></i>
+              <span>পারমিশন পরিবর্তন করে পুনরায় স্ক্যান করুন (Retry Scan)</span>
+            </button>
           </div>
         ` : '';
+
+        const solutionsHtml = `
+          <div style="background: rgba(239, 68, 68, 0.08); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px 14px; margin-top: 10px;">
+            <div style="font-size: 13px; font-weight: 700; color: #ef4444; margin-bottom: 6px;">💡 কীভাবে ফোল্ডারের এক্সেস পরিবর্তন করবেন (Easy 3 Steps):</div>
+            <ol style="margin: 0; padding-left: 20px; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary);">
+              <li>নিচের <strong>"Open in Drive"</strong> বাটনে ক্লিক করে Google Drive ফোল্ডারে যান।</li>
+              <li>ফোল্ডারের টাইটেলে রাইট ক্লিক করে <strong>Share (শেয়ার)</strong> অপশন সিলেক্ট করুন।</li>
+              <li><strong>General access</strong> এ "Restricted" পরিবর্তন করে <strong>"Anyone with the link" (যে কেউ লিংকের মাধ্যমে দেখতে পাবে)</strong> সিলেক্ট করে Done চাপুন।</li>
+              <li>এরপর নিচের <strong>"Retry Scan"</strong> বাটনে চাপলেই সব ভিডিও নিমেষেই লোড হয়ে যাবে!</li>
+            </ol>
+            ${openDriveBtn}
+          </div>
+        `;
 
         alertContainer.innerHTML = `
           <div class="alert-box alert-danger" style="display: block;">
@@ -2470,6 +2540,11 @@ class OmniFlowApp {
           </div>
         `;
         createIcons({ icons });
+
+        const retryBtn = document.getElementById('btn-drive-retry-action');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', () => this.syncDriveFromCurrentInput(url));
+        }
       }
       this.showToast(scanResult.error === 'ACCESS_RESTRICTED' ? 'Google Drive Access Restricted' : (scanResult.message || 'Drive Scan Error'), 'error');
       return;

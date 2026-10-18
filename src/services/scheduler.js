@@ -137,6 +137,7 @@ export class SchedulerService {
       console.warn('[Scheduler] IndexedDB findVideoBlob lookup:', e);
     }
 
+    // 1. Blob URL
     if (video.videoUrl && video.videoUrl.startsWith('blob:')) {
       try {
         const r = await fetch(video.videoUrl);
@@ -151,6 +152,37 @@ export class SchedulerService {
       }
     }
 
+    // 2. Relative API proxy URL (e.g. /api/drive/download?fileId=...)
+    if (video.videoUrl && video.videoUrl.startsWith('/api/')) {
+      try {
+        const r = await fetch(video.videoUrl);
+        if (r.ok) {
+          const b = await r.blob();
+          video.fileReference = b;
+          try { await saveVideoBlob(video.id, b); } catch (e) {}
+          return b;
+        }
+      } catch (e) {
+        console.warn('[Scheduler] API proxy URL fetch error:', e);
+      }
+    }
+
+    // 3. Google Drive File ID via server-side download proxy
+    if (video.driveFileId) {
+      try {
+        const r = await fetch(`/api/drive/download?fileId=${encodeURIComponent(video.driveFileId)}`);
+        if (r.ok) {
+          const b = await r.blob();
+          video.fileReference = b;
+          try { await saveVideoBlob(video.id, b); } catch (e) {}
+          return b;
+        }
+      } catch (e) {
+        console.warn('[Scheduler] Drive file proxy download error:', e);
+      }
+    }
+
+    // 4. Remote HTTP/HTTPS URL
     if (video.videoUrl && (video.videoUrl.startsWith('http://') || video.videoUrl.startsWith('https://'))) {
       try {
         const r = await fetch(video.videoUrl);
