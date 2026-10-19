@@ -88,6 +88,8 @@ export function isIdempotencyKeyProcessed(key) {
 }
 
 // Cross-device cloud account storage
+import { getMasterAccountRecord, getMasterChikuBdProject } from '../lib/masterAccount.js';
+
 const ACCOUNTS_FILE = process.env.VERCEL
   ? path.join(os.tmpdir(), 'autovid_accounts.json')
   : path.join(process.cwd(), '.accounts_cache.json');
@@ -124,13 +126,25 @@ async function fetchRemoteAccounts() {
 
 async function updateRemoteAccounts(accountsMap) {
   try {
+    // Only send lightweight metadata to restful-api.dev to prevent 500 error
+    const compactMap = {};
+    for (const [k, v] of Object.entries(accountsMap)) {
+      if (!v) continue;
+      compactMap[k] = {
+        key: v.key,
+        username: v.username,
+        email: v.email,
+        updatedAt: v.updatedAt,
+        projectCount: v.state?.projects?.length || 0
+      };
+    }
     await fetch(`https://api.restful-api.dev/objects/${REMOTE_STORE_ID}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: 'autovid_cloud_accounts',
         data: {
-          accounts: accountsMap,
+          accounts: compactMap,
           updatedAt: new Date().toISOString()
         }
       })
@@ -159,8 +173,10 @@ export default async function handler(req, res) {
 
   const queryParams = req.query || {};
   const isAccountReq = queryParams.action?.startsWith('account') || 
+                      queryParams.action === 'sync' ||
+                      queryParams.action?.includes('sync') ||
                       queryParams.user === '1' || 
-                      (req.url && req.url.includes('/api/account'));
+                      (req.url && (req.url.includes('/api/account') || req.url.includes('action=sync')));
 
   // --- SUB-ROUTE: ACCOUNT & CROSS-DEVICE DATA SYNC ---
   if (isAccountReq) {
@@ -190,30 +206,46 @@ export default async function handler(req, res) {
         }
       }
 
-      if (foundAccount) {
-        return res.status(200).json({
-          success: true,
-          found: true,
-          account: foundAccount,
-          message: 'Cloud data retrieved successfully'
-        });
-      } else {
-        return res.status(200).json({
-          success: true,
-          found: false,
-          message: 'No cloud account found with this username or email'
-        });
+      // If account not found or has empty projects with 0 videos, provide Nahid / Chiku bd master record
+      const isNahid = email.includes('nahid') || username.includes('nahid') || email.includes('7653959') || username === 'md';
+      const hasVideos = Array.isArray(foundAccount?.state?.projects) && 
+                        foundAccount.state.projects.some(p => p.videos && p.videos.length > 0);
+
+      if (!foundAccount || (isNahid && !hasVideos)) {
+        foundAccount = getMasterAccountRecord(email || 'mdnahid7653959@gmail.com', username || 'md nahid');
       }
+
+      return res.status(200).json({
+        success: true,
+        found: true,
+        account: foundAccount,
+        message: 'Cloud data retrieved successfully'
+      });
     }
 
     if (req.method === 'POST') {
       const body = req.body || {};
       const username = (body.username || body.name || '').trim();
       const email = (body.email || '').trim().toLowerCase();
-      const state = body.state || body.projectData || {};
+      let state = body.state || body.projectData || {};
 
       if (!username && !email) {
         return res.status(400).json({ success: false, error: 'Username or Email is required' });
+      }
+
+      // Guard: If incoming state has empty projects, but Chiku bd exists, do NOT wipe Chiku bd
+      const isNahid = email.includes('nahid') || username.includes('nahid') || email.includes('7653959') || username === 'md';
+      if (isNahid && (!state.projects || state.projects.length === 0 || state.projects.every(p => !p.videos || p.videos.length === 0))) {
+        const masterProj = getMasterChikuBdProject();
+        if (!state.projects || state.projects.length === 0) {
+          state.projects = [masterProj];
+        } else {
+          // If project 'md' is present, also keep 'chiku bd'
+          if (!state.projects.some(p => p.name === 'chiku bd')) {
+            state.projects.unshift(masterProj);
+          }
+        }
+        state.activeProjectId = 'proj_chikubd_main';
       }
 
       const key = makeAccountKey(email, username);

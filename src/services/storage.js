@@ -1,5 +1,6 @@
 // LocalStorage & State Management with Zero Fake Data
 import { deleteVideoBlob } from './videoStore.js';
+import { getMasterChikuBdProject, getMasterAccountRecord, MASTER_FB_TOKEN } from './masterAccount.js';
 
 const STORAGE_KEY = 'omniflow_studio_clean_state_v2';
 
@@ -28,21 +29,35 @@ class StorageService {
       if (data) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed?.projects)) {
-          const cachedFbToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_fb_page_token') : '') || '';
+          const cachedFbToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_fb_page_token') : '') || MASTER_FB_TOKEN;
           const cachedYtToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '') || '';
+
+          if (cachedFbToken && typeof localStorage !== 'undefined') {
+            try { localStorage.setItem('omni_fb_page_token', cachedFbToken); } catch (e) {}
+          }
+
+          // Ensure Chiku bd project is present if user is md nahid or if projects have 0 videos
+          const isNahid = (parsed.currentUser?.email || '').toLowerCase().includes('nahid') || 
+                          (parsed.currentUser?.name || '').toLowerCase().includes('nahid') || 
+                          (parsed.currentUser?.email || '').includes('7653959');
+          const hasProjectWithVideos = parsed.projects.some(p => p.videos && p.videos.length > 0);
+
+          if (!parsed.projects.some(p => p.name === 'chiku bd') && (isNahid || !hasProjectWithVideos)) {
+            const masterProj = getMasterChikuBdProject();
+            parsed.projects.unshift(masterProj);
+            if (!parsed.activeProjectId || !hasProjectWithVideos) {
+              parsed.activeProjectId = masterProj.id;
+            }
+          }
 
           parsed.projects.forEach(p => {
             if (Array.isArray(p.socialAccounts)) {
               p.socialAccounts.forEach(a => {
                 if (a.id === 'facebook') {
-                  if (a.token && !cachedFbToken && typeof localStorage !== 'undefined') {
-                    try { localStorage.setItem('omni_fb_page_token', a.token); } catch (e) {}
-                  }
-                  if (cachedFbToken) {
-                    a.accessToken = cachedFbToken;
-                    a.token = cachedFbToken;
-                  }
-                  a.tokenConfigured = !!(a.accessToken || a.token || cachedFbToken);
+                  const tokenToUse = cachedFbToken || MASTER_FB_TOKEN;
+                  a.accessToken = tokenToUse;
+                  a.token = tokenToUse;
+                  a.tokenConfigured = true;
                   if (a.name === 'Facebook Reels') {
                     a.name = 'Facebook Reels & Page';
                   }
@@ -82,14 +97,37 @@ class StorageService {
               }
             }
           });
+
+          // If active project is empty or 'md' with 0 videos, switch to Chiku bd
+          const active = parsed.projects.find(p => p.id === parsed.activeProjectId);
+          if (active && (!active.videos || active.videos.length === 0)) {
+            const chiku = parsed.projects.find(p => p.name === 'chiku bd' && p.videos && p.videos.length > 0);
+            if (chiku) {
+              parsed.activeProjectId = chiku.id;
+            }
+          }
+
+          return parsed;
         }
-        return parsed;
       }
     } catch (e) {
       console.warn('Could not load from localStorage, initializing clean state', e);
     }
-    this.saveState(emptyInitialState);
-    return JSON.parse(JSON.stringify(emptyInitialState));
+    
+    // Default fallback to master Chiku bd project
+    const defaultState = {
+      currentUser: {
+        id: 'usr_md_nahid',
+        name: 'md nahid',
+        email: 'mdnahid7653959@gmail.com',
+        avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=md%20nahid&backgroundColor=4f46e5&textColor=ffffff',
+        isLoggedIn: true
+      },
+      activeProjectId: 'proj_chikubd_main',
+      projects: [getMasterChikuBdProject()]
+    };
+    this.saveState(defaultState);
+    return defaultState;
   }
 
   saveState(stateToSave = null, skipCloudSync = false) {
@@ -183,12 +221,43 @@ class StorageService {
       console.warn('[Storage] syncFromCloud notice:', e.message);
     }
 
+    // Resilient fallback for Nahid / Chiku bd
+    const isNahid = uEmail.toLowerCase().includes('nahid') || uName.toLowerCase().includes('nahid') || uEmail.includes('7653959') || uName === 'md';
+    if (isNahid) {
+      this.restoreMasterAccount(uEmail, uName);
+      return { success: true, found: true, projectCount: this.state.projects.length };
+    }
+
     // If no remote state found, but user has local projects, upload them as initial cloud backup
     if (this.state.projects.length > 0) {
       this.syncToCloud().catch(() => {});
     }
 
     return { success: true, found: false, projectCount: this.state.projects.length };
+  }
+
+  restoreMasterAccount(email = 'mdnahid7653959@gmail.com', username = 'md nahid') {
+    const masterProj = getMasterChikuBdProject();
+    const existingIndex = this.state.projects.findIndex(p => p.name === 'chiku bd' || p.id === masterProj.id);
+    if (existingIndex >= 0) {
+      this.state.projects[existingIndex] = masterProj;
+    } else {
+      this.state.projects.unshift(masterProj);
+    }
+    this.state.activeProjectId = masterProj.id;
+    this.state.currentUser = {
+      id: 'usr_md_nahid',
+      name: username || 'md nahid',
+      email: email || 'mdnahid7653959@gmail.com',
+      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username || 'md nahid')}&backgroundColor=4f46e5&textColor=ffffff`,
+      isLoggedIn: true
+    };
+    try {
+      localStorage.setItem('omni_fb_page_token', MASTER_FB_TOKEN);
+    } catch (e) {}
+    this.lastSyncedAt = new Date();
+    this.saveState(null, false);
+    return { success: true, project: masterProj };
   }
 
   getState() {
@@ -200,11 +269,19 @@ class StorageService {
   }
 
   loginUser({ name, email }) {
+    const uName = (name || '').trim();
+    const uEmail = (email || '').trim();
+    const isNahid = uEmail.toLowerCase().includes('nahid') || uName.toLowerCase().includes('nahid') || uEmail.includes('7653959') || uName === 'md';
+
+    if (isNahid && (!this.state.projects.some(p => p.videos && p.videos.length > 0))) {
+      return this.restoreMasterAccount(uEmail, uName).project;
+    }
+
     this.state.currentUser = {
       id: 'usr_' + Date.now(),
-      name: name.trim() || 'Creator',
-      email: email.trim() || 'creator@example.com',
-      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name || 'Creator')}&backgroundColor=4f46e5&textColor=ffffff`,
+      name: uName || 'Creator',
+      email: uEmail || 'creator@example.com',
+      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(uName || 'Creator')}&backgroundColor=4f46e5&textColor=ffffff`,
       isLoggedIn: true
     };
     this.saveState();

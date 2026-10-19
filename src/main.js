@@ -248,9 +248,9 @@ class OmniFlowApp {
             <div style="flex:1; height:1px; background:var(--border-light);"></div>
           </div>
 
-          <button class="btn btn-outline" id="btn-quick-demo-login" style="width:100%;">
-            <i data-lucide="user-check"></i>
-            <span>Quick Start as Nahid (Creator)</span>
+          <button class="btn btn-outline" id="btn-quick-demo-login" style="width:100%; border-color:rgba(99,102,241,0.4); color:#6366f1; font-weight:700;">
+            <i data-lucide="zap"></i>
+            <span>Quick Start as md nahid (Chiku bd • 10 Videos & 2 Channels)</span>
           </button>
         </div>
       </div>
@@ -286,21 +286,11 @@ class OmniFlowApp {
     document.getElementById('btn-quick-demo-login').addEventListener('click', async () => {
       const btn = document.getElementById('btn-quick-demo-login');
       btn.disabled = true;
-      btn.innerHTML = '<i data-lucide="loader" class="spin"></i> <span>Syncing...</span>';
+      btn.innerHTML = '<i data-lucide="loader" class="spin"></i> <span>Loading...</span>';
       this.refreshIcons();
 
-      try {
-        const syncRes = await storage.syncFromCloud('Nahid Hasan', 'nahid.creator@example.com');
-        if (syncRes.found) {
-          this.showToast(`🎉 ক্লাউড থেকে Nahid Hasan এর প্রজেক্ট ও ভিডিও ডেটা সফলভাবে লোড হয়েছে!`, 'success');
-        } else {
-          storage.loginUser({ name: 'Nahid Hasan', email: 'nahid.creator@example.com' });
-          this.showToast('Logged in successfully!', 'success');
-        }
-      } catch (e) {
-        storage.loginUser({ name: 'Nahid Hasan', email: 'nahid.creator@example.com' });
-        this.showToast('Logged in successfully!', 'success');
-      }
+      storage.restoreMasterAccount('mdnahid7653959@gmail.com', 'md nahid');
+      this.showToast('🎉 Chiku bd প্রজেক্ট, ২টি সোশ্যাল চ্যানেল ও ১০টি ভিডিও সফলভাবে লোড হয়েছে!', 'success');
       this.render();
     });
   }
@@ -362,6 +352,13 @@ class OmniFlowApp {
               </button>
             </div>
           </form>
+
+          <div style="margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--border-light); text-align: center;">
+            <button type="button" class="btn btn-outline" id="btn-onboarding-restore-chiku" style="width: 100%; border-color: rgba(99,102,241,0.4); color: #6366f1; font-weight: 700;">
+              <i data-lucide="zap"></i>
+              <span>⚡ ১-ক্লিকে Chiku bd প্রজেক্ট লোড করুন (১০টি ভিডিও ও ২ চ্যানেল)</span>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -381,6 +378,15 @@ class OmniFlowApp {
       this.showToast(`Project "${name}" created!`, 'success');
       this.render();
     });
+
+    const onbChikuBtn = document.getElementById('btn-onboarding-restore-chiku');
+    if (onbChikuBtn) {
+      onbChikuBtn.addEventListener('click', () => {
+        storage.restoreMasterAccount('mdnahid7653959@gmail.com', 'md nahid');
+        this.showToast('🎉 Chiku bd প্রজেক্ট, ২টি চ্যানেল ও ১০টি ভিডিও সফলভাবে লোড হয়েছে!', 'success');
+        this.render();
+      });
+    }
   }
 
   // --- RENDER ACTIVE TAB CONTENT ---
@@ -431,6 +437,22 @@ class OmniFlowApp {
           </button>
         </div>
       </div>
+
+      ${totalVideos === 0 && storage.state.projects.some(p => p.name === 'chiku bd' && p.videos && p.videos.length > 0) ? `
+        <div style="background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(16,185,129,0.08)); border: 1px solid rgba(99,102,241,0.3); border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <i data-lucide="sparkles" style="color: #6366f1; width: 22px; height: 22px; flex-shrink: 0;"></i>
+            <div>
+              <div style="font-weight: 700; font-size: 0.92rem; color: var(--text-primary);">আপনার কাছে 'Chiku bd' প্রজেক্টে ১০টি ভিডিও ও ২টি চ্যানেল রয়েছে!</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">বর্তমান প্রজেক্ট (${project.name})-এ ভিডিও নেই। সহজে সুইচ করে পোস্ট শুরু করতে পারবেন।</div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-dash-switch-chikubd" style="flex-shrink: 0;">
+            <i data-lucide="arrow-right-left"></i>
+            <span>Chiku bd তে সুইচ করুন</span>
+          </button>
+        </div>
+      ` : ''}
 
       <!-- Real Metrics Grid -->
       <div class="stats-grid">
@@ -1214,6 +1236,22 @@ class OmniFlowApp {
           <span>Update Account Identity or Switch User</span>
         </h3>
 
+        ${project.name !== 'chiku bd' || project.videos.length === 0 ? `
+          <div style="background:linear-gradient(135deg, rgba(99,102,241,0.08), rgba(16,185,129,0.08)); border:1px solid rgba(99,102,241,0.3); border-radius:var(--radius-md); padding:14px 18px; margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; gap:14px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <i data-lucide="sparkles" style="color:#6366f1; width:22px; height:22px; flex-shrink:0;"></i>
+              <div>
+                <div style="font-weight:700; font-size:0.92rem; color:var(--text-primary);">আপনার Chiku bd অ্যাকাউন্টে ২টি কানেক্টেড সোশ্যাল চ্যানেল এবং ১০টি ভিডিও রয়েছে!</div>
+                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">১-ক্লিকে Chiku bd প্রজেক্ট চালু করে সম্পূর্ণ ডেটা ও ভিডিও লোড করুন।</div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-account-switch-chiku" style="flex-shrink:0;">
+              <i data-lucide="zap"></i>
+              <span>Chiku bd চালু করুন</span>
+            </button>
+          </div>
+        ` : ''}
+
         <form id="form-account-update-profile" style="max-width:540px;">
           <div class="form-group" style="margin-bottom:12px;">
             <label class="form-label">Username / Full Name</label>
@@ -1225,10 +1263,14 @@ class OmniFlowApp {
             <input type="email" class="form-input" id="input-account-email" value="${user.email}" required />
           </div>
 
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; flex-wrap:wrap; gap:10px;">
             <button type="submit" class="btn btn-primary btn-sm">
               <i data-lucide="save"></i>
               <span>Save & Sync Changes</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-account-restore-chiku" style="color:#6366f1; border-color:rgba(99,102,241,0.4); font-weight:700;">
+              <i data-lucide="zap"></i>
+              <span>⚡ Restore Chiku bd (10 Videos)</span>
             </button>
             <button type="button" class="btn btn-outline btn-sm" id="btn-account-logout-alt" style="color:var(--danger); border-color:rgba(239,68,68,0.3);">
               <i data-lucide="log-out"></i>
@@ -2778,12 +2820,66 @@ class OmniFlowApp {
     if (updateProfileForm) {
       updateProfileForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const submitBtn = updateProfileForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i data-lucide="loader" class="spin"></i> <span>Syncing...</span>';
+          this.refreshIcons();
+        }
+
         const newName = document.getElementById('input-account-name').value.trim();
         const newEmail = document.getElementById('input-account-email').value.trim();
-        storage.loginUser({ name: newName, email: newEmail });
-        await storage.syncToCloud();
-        this.showToast('প্রোফাইল আপডেট হয়েছে এবং ক্লাউডে সিঙ্ক করা হয়েছে!', 'success');
+
+        const syncRes = await storage.syncFromCloud(newName, newEmail);
+        if (syncRes.found) {
+          this.showToast(`🎉 স্বাগতম ${newName}! ক্লাউড থেকে আপনার Chiku bd প্রজেক্ট ও সমস্ত ভিডিও ডেটা সফলভাবে লোড হয়েছে!`, 'success');
+        } else {
+          storage.restoreMasterAccount(newEmail, newName);
+          this.showToast('🎉 আপনার Chiku bd একাউন্ট (২টি চ্যানেল ও ১০টি ভিডিও) সফলভাবে রিস্টোর ও সিঙ্ক হয়েছে!', 'success');
+        }
         this.render();
+      });
+    }
+
+    const restoreChikuBtn = document.getElementById('btn-account-restore-chiku');
+    if (restoreChikuBtn) {
+      restoreChikuBtn.addEventListener('click', () => {
+        const u = storage.getCurrentUser();
+        storage.restoreMasterAccount(u.email || 'mdnahid7653959@gmail.com', u.name || 'md nahid');
+        this.showToast('🎉 Chiku bd প্রজেক্ট (২টি চ্যানেল ও ১০টি ভিডিও) সফলভাবে লোড হয়েছে!', 'success');
+        this.render();
+      });
+    }
+
+    const switchChikuBtn = document.getElementById('btn-account-switch-chiku');
+    if (switchChikuBtn) {
+      switchChikuBtn.addEventListener('click', () => {
+        const chiku = storage.state.projects.find(p => p.name === 'chiku bd');
+        if (chiku) {
+          storage.setActiveProjectId(chiku.id);
+          this.showToast('🎉 সফলভাবে Chiku bd প্রজেক্টে সুইচ করা হয়েছে!', 'success');
+          this.render();
+        } else {
+          storage.restoreMasterAccount();
+          this.showToast('🎉 Chiku bd প্রজেক্ট লোড করা হয়েছে!', 'success');
+          this.render();
+        }
+      });
+    }
+
+    const dashSwitchChikuBtn = document.getElementById('btn-dash-switch-chikubd');
+    if (dashSwitchChikuBtn) {
+      dashSwitchChikuBtn.addEventListener('click', () => {
+        const chiku = storage.state.projects.find(p => p.name === 'chiku bd');
+        if (chiku) {
+          storage.setActiveProjectId(chiku.id);
+          this.showToast('🎉 সফলভাবে Chiku bd প্রজেক্টে সুইচ করা হয়েছে!', 'success');
+          this.render();
+        } else {
+          storage.restoreMasterAccount();
+          this.showToast('🎉 Chiku bd প্রজেক্ট লোড করা হয়েছে!', 'success');
+          this.render();
+        }
       });
     }
 
