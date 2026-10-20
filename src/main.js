@@ -2554,11 +2554,10 @@ class OmniFlowApp {
     // 1. Google 1-Click Button
     document.getElementById('btn-trigger-google-oauth').addEventListener('click', async () => {
       const btn = document.getElementById('btn-trigger-google-oauth');
-      let id = GoogleAuthService.getClientId();
-      if (!id) {
-        const val = document.getElementById('input-oauth-client-id').value.trim();
-        if (val) GoogleAuthService.setClientId(val);
-      }
+      const clientIdVal = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
+      const clientSecretVal = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
+      if (clientIdVal) GoogleAuthService.setClientId(clientIdVal);
+      if (clientSecretVal) GoogleAuthService.setClientSecret(clientSecretVal);
 
       btn.disabled = true;
       btn.innerHTML = 'Connecting to Google OAuth...';

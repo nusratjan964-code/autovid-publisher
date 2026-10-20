@@ -98,7 +98,9 @@ export class GoogleAuthService {
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     code: response.code,
-                    redirectUri: 'postmessage'
+                    redirectUri: 'postmessage',
+                    clientId: this.getClientId(),
+                    clientSecret: this.getClientSecret()
                   })
                 });
 
