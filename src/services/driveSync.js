@@ -131,29 +131,34 @@ export class DriveSyncService {
       };
     }
 
-    // Attempt 3: Direct browser client using Google Drive API v3
+    // Attempt 3: Direct browser client using Google Drive API v3 (with pageSize=1000 and pageToken loop)
     if (apiKey || token) {
       try {
         const folderId = validation.id;
-        const q = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.webm') and trashed = false`);
+        const q = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'video/' or name contains '.mp4' or name contains '.mov' or name contains '.webm' or name contains '.mkv') and trashed = false`);
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
         const keyParam = apiKey ? `&key=${apiKey.trim()}` : '';
-        const apiUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}`;
+        let pageToken = '';
+        let allApiFiles = [];
 
-        const response = await fetch(apiUrl, { headers });
-        if (response.ok) {
-          const data = await response.json();
-          const files = data.files || [];
+        do {
+          const pageParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+          const apiUrl = `https://www.googleapis.com/drive/v3/files?q=${q}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=nextPageToken,files(id,name,mimeType,size,videoMediaMetadata,webContentLink,thumbnailLink)${keyParam}${pageParam}`;
 
-          if (files.length === 0) {
-            return {
-              success: false,
-              error: 'NO_VIDEOS_FOUND',
-              message: 'এই ফোল্ডারে কোনো ভিডিও ফাইল (.mp4, .mov, .webm) পাওয়া যায়নি।'
-            };
+          const response = await fetch(apiUrl, { headers });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.files && data.files.length > 0) {
+              allApiFiles.push(...data.files);
+            }
+            pageToken = data.nextPageToken || '';
+          } else {
+            break;
           }
+        } while (pageToken && allApiFiles.length < 5000);
 
-          const mappedVideos = files.map(file => {
+        if (allApiFiles.length > 0) {
+          const mappedVideos = allApiFiles.map(file => {
             const durationMillis = file.videoMediaMetadata?.durationMillis;
             let durationFormatted = '0:30';
             if (durationMillis) {
