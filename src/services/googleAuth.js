@@ -1,30 +1,56 @@
 // Google OAuth 2.0 & YouTube Data API v3 Service
 import { storage } from './storage.js';
 
+export function sanitizeGoogleClientId(id = '') {
+  let clean = (id || '').trim();
+  if (clean.includes('nokpte')) {
+    clean = clean.replace(/18i1kra158/g, 'i8ilkral58')
+                 .replace(/18i/g, 'i8i')
+                 .replace(/1kra/g, 'lkra')
+                 .replace(/158/g, 'l58');
+  }
+  return clean;
+}
+
 export class GoogleAuthService {
   static codeClient = null;
 
   static getClientId() {
-    return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
-           (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
-           '';
+    let id = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
+             (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
+             '';
+    id = sanitizeGoogleClientId(id);
+    if (!id && typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) {
+      id = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    }
+    return id;
   }
 
   static setClientId(id) {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('omni_google_client_id', (id || '').trim());
+      const clean = sanitizeGoogleClientId(id);
+      localStorage.setItem('omni_google_client_id', clean);
     }
   }
 
   static getClientSecret() {
-    return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) || 
-           (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_secret')) || 
-           '';
+    let secret = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) || 
+                 (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_secret')) || 
+                 '';
+    secret = (secret || '').trim();
+    if ((!secret || secret.includes('•') || secret.includes('*')) && typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) {
+      secret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET;
+    }
+    return secret;
   }
 
   static setClientSecret(secret) {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('omni_google_client_secret', (secret || '').trim());
+      let clean = (secret || '').trim();
+      if (!clean || clean.includes('•') || clean.includes('*')) {
+        clean = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) || '';
+      }
+      localStorage.setItem('omni_google_client_secret', clean);
     }
   }
 

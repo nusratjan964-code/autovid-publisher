@@ -2310,12 +2310,33 @@ class OmniFlowApp {
               </button>
             </div>
 
-            <!-- 🌟 Option 1 (PRIMARY): Permanent Google Refresh Token (NEVER EXPIRES) -->
+            <!-- 🌟 Option 1 (RECOMMENDED): 1-Click Google OAuth (Zero hassle, auto refresh) -->
+            <div style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.02)); border:2px solid #EF4444; border-radius:var(--radius-md); padding:14px 16px; margin-bottom:14px; box-shadow:0 4px 14px rgba(239, 68, 68, 0.12);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <label style="font-size:0.86rem; font-weight:800; color:#991b1b; margin:0; display:flex; align-items:center; gap:6px;">
+                  <i data-lucide="zap" style="width:18px; height:18px; color:#EF4444;"></i>
+                  <span>পদ্ধতি ১ (সবচেয়ে সহজ): ১-ক্লিকে আজীবন অটো-রিনিউ কানেক্ট</span>
+                </label>
+                <span style="font-size:0.7rem; font-weight:700; background:#EF4444; color:#fff; padding:2px 8px; border-radius:12px;">রেকমেন্ডেড ⭐</span>
+              </div>
+              <div style="font-size:0.74rem; color:var(--text-secondary); margin-bottom:10px; line-height:1.4;">
+                কোনো জটিল কোড বা টোকেন কপি-পেস্ট করা ছাড়াই নিচের বাটনে চাপ দিন। গুগল অ্যাকাউন্ট সিলেক্ট করে পারমিশন দিলে <strong>সার্ভার নিজে থেকেই চিরস্থায়ী Refresh Token তৈরি করে সংরক্ষণ করবে!</strong>
+              </div>
+              <button class="btn btn-outline" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#fff; background:#FF0000; font-weight:700; padding:11px; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 2px 8px rgba(255,0,0,0.25);">
+                <i data-lucide="user-check"></i>
+                <span>🔄 1-Click Google Login দিয়ে কানেক্ট করুন</span>
+              </button>
+              <div style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-top:5px;">
+                💡 পপআপ আসলে আপনার মূল Gmail ইমেইল সিলেক্ট করবেন।
+              </div>
+            </div>
+
+            <!-- 🌟 Option 2: Permanent Google Refresh Token from OAuth Playground -->
             <div style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.03)); border:2px solid #10b981; border-radius:var(--radius-md); padding:14px 16px; margin-bottom:14px; box-shadow:0 4px 14px rgba(16, 185, 129, 0.15);">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <label style="font-size:0.86rem; font-weight:800; color:#065f46; margin:0; display:flex; align-items:center; gap:6px;">
                   <i data-lucide="shield-check" style="width:18px; height:18px; color:#10b981;"></i>
-                  <span>চিরস্থায়ী Refresh Token (1//...) [আজীবন অটো-রিনিউ]:</span>
+                  <span>পদ্ধতি ২: চিরস্থায়ী Refresh Token (1//...) পেস্ট করুন:</span>
                 </label>
                 <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.74rem; color:#059669; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:700; background:rgba(16, 185, 129, 0.15); padding:3px 8px; border-radius:4px;">
                   <span>OAuth Playground</span>
@@ -2323,28 +2344,39 @@ class OmniFlowApp {
                 </a>
               </div>
               <div style="font-size:0.74rem; color:var(--text-secondary); margin-bottom:8px; line-height:1.4;">
-                Google OAuth Playground-এর Step 2-তে <strong>"Exchange authorization code for tokens"</strong> বাটনে ক্লিক করলে যে <strong>Refresh token (যা <code style="font-weight:700; color:#065f46;">1//...</code> দিয়ে শুরু হয়)</strong> পাওয়া যায়, সেটি এখানে পেস্ট করুন। সার্ভার প্রতি ঘণ্টায় নিজে থেকে টোকেন তৈরি করবে, আপনার আর কখনো হাত দেওয়া লাগবে না!
+                Google OAuth Playground-এর Step 2-তে <strong>"Exchange authorization code for tokens"</strong> বাটনে পাওয়া <strong>Refresh token (যা <code style="font-weight:700; color:#065f46;">1//...</code> দিয়ে শুরু হয়)</strong> এখানে পেস্ট করুন:
               </div>
               <textarea class="form-input" id="modal-yt-refresh-token-input" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical; border:1.5px solid #10b981;" placeholder="1//... (Google Refresh Token এখানে পেস্ট করুন)"></textarea>
 
-              <!-- Client ID & Secret for Refresh Token exchange -->
-              <div style="margin-top:10px; background:rgba(255,255,255,0.7); border:1px dashed #10b981; border-radius:6px; padding:8px 10px;">
-                <div style="font-size:0.72rem; font-weight:700; color:#065f46; margin-bottom:4px; display:flex; align-items:center; gap:4px;">
-                  <i data-lucide="key" style="width:12px; height:12px;"></i>
-                  <span>OAuth Credentials (যে Client ID দিয়ে Refresh Token নিয়েছেন):</span>
+              <!-- Client ID & Secret for Refresh Token exchange with Auto-Fill & Copy -->
+              <div style="margin-top:10px; background:rgba(255,255,255,0.85); border:1px dashed #10b981; border-radius:6px; padding:8px 10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                  <div style="font-size:0.72rem; font-weight:700; color:#065f46; display:flex; align-items:center; gap:4px;">
+                    <i data-lucide="key" style="width:12px; height:12px;"></i>
+                    <span>OAuth Credentials (যে Client ID দিয়ে টোকেন নিয়েছেন):</span>
+                  </div>
+                  <button type="button" class="btn btn-outline btn-xs" id="btn-autofill-credentials" style="font-size:0.67rem; padding:2px 7px; border-color:#10b981; color:#047857; background:#ecfdf5; font-weight:700;">
+                    ⚡ সঠিক Credentials অটো-ফিল
+                  </button>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:4px;">
                   <div>
-                    <label style="font-size:0.68rem; color:#047857; font-weight:600; display:block; margin-bottom:2px;">Google Client ID:</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                      <label style="font-size:0.68rem; color:#047857; font-weight:600; margin:0;">Google Client ID:</label>
+                      <button type="button" class="btn btn-outline btn-xs" id="btn-copy-yt-client-id" style="font-size:0.62rem; padding:1px 5px; color:#047857;">📋 কপি ID</button>
+                    </div>
                     <input type="text" class="form-input" id="modal-yt-client-id" value="${GoogleAuthService.getClientId() || ''}" placeholder="...apps.googleusercontent.com" style="font-size:0.72rem; padding:5px 8px; font-family:monospace; border:1px solid #6ee7b7;" />
                   </div>
                   <div>
-                    <label style="font-size:0.68rem; color:#047857; font-weight:600; display:block; margin-bottom:2px;">Google Client Secret:</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                      <label style="font-size:0.68rem; color:#047857; font-weight:600; margin:0;">Google Client Secret:</label>
+                      <button type="button" class="btn btn-outline btn-xs" id="btn-copy-yt-client-secret" style="font-size:0.62rem; padding:1px 5px; color:#047857;">📋 কপি Secret</button>
+                    </div>
                     <input type="password" class="form-input" id="modal-yt-client-secret" value="${GoogleAuthService.getClientSecret() || ''}" placeholder="GOCSPX-..." style="font-size:0.72rem; padding:5px 8px; font-family:monospace; border:1px solid #6ee7b7;" />
                   </div>
                 </div>
-                <div style="font-size:0.66rem; color:var(--text-muted); line-height:1.3;">
-                  💡 টিপস: একবার ইনপুট দিলে ব্রাউজারে ও সার্ভারে স্থায়ীভাবে এনক্রিপ্ট হয়ে সেভ থাকবে, আর দিতে হবে না।
+                <div style="font-size:0.68rem; background:rgba(16, 185, 129, 0.12); border-left:3px solid #10b981; padding:5px 8px; border-radius:3px; margin-top:5px; color:#065f46; line-height:1.35;">
+                  ⚠️ <strong>OAuth Playground ব্যবহারের জরুরি নিয়ম:</strong> Playground-এর উপরে ডানদিকের ⚙️ <strong>Gear আইকন</strong>-এ ক্লিক করে <strong>"Use your own OAuth credentials"</strong> বক্সে টিক (✓) দিয়ে এই Client ID ও Secret বসিয়ে টোকেন নিলেই এটি কাজ করবে।
                 </div>
               </div>
 
@@ -2354,17 +2386,6 @@ class OmniFlowApp {
                   <i data-lucide="check-circle-2"></i>
                   <span>✓ চিরস্থায়ী Refresh Token সেভ ও সক্রিয় করুন</span>
                 </button>
-              </div>
-            </div>
-
-            <!-- 🌟 Option 2: 1-Click Google OAuth Button -->
-            <div style="margin-bottom:14px;">
-              <button class="btn btn-outline" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#FF0000; font-weight:700; padding:10px; display:flex; align-items:center; justify-content:center; gap:8px;">
-                <i data-lucide="user-check"></i>
-                <span>🔄 1-Click Google Login দিয়ে কানেক্ট করুন (Auto-Refresh চালু হবে)</span>
-              </button>
-              <div style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-top:4px;">
-                পপআপ আসলে মূল Gmail সিলেক্ট করবেন।
               </div>
             </div>
 
@@ -2551,16 +2572,65 @@ class OmniFlowApp {
       });
     }
 
+    // Credentials Helper Buttons (Auto-Fill & Copy)
+    const btnAutoFill = document.getElementById('btn-autofill-credentials');
+    if (btnAutoFill) {
+      btnAutoFill.addEventListener('click', () => {
+        const idInput = document.getElementById('modal-yt-client-id');
+        const secInput = document.getElementById('modal-yt-client-secret');
+        const defId = GoogleAuthService.getClientId();
+        const defSec = GoogleAuthService.getClientSecret();
+        if (idInput) idInput.value = defId;
+        if (secInput) secInput.value = defSec;
+        GoogleAuthService.setClientId(defId);
+        GoogleAuthService.setClientSecret(defSec);
+        this.showToast('✓ সঠিক Google Credentials সফলভাবে অটো-ফিল করা হয়েছে!', 'success');
+      });
+    }
+
+    const btnCopyId = document.getElementById('btn-copy-yt-client-id');
+    if (btnCopyId) {
+      btnCopyId.addEventListener('click', async () => {
+        const val = (document.getElementById('modal-yt-client-id')?.value || GoogleAuthService.getClientId()).trim();
+        try {
+          await navigator.clipboard.writeText(val);
+          this.showToast('✓ Client ID কপি করা হয়েছে!', 'success');
+        } catch {
+          prompt('কপি করতে Ctrl+C চাপুন:', val);
+        }
+      });
+    }
+
+    const btnCopySec = document.getElementById('btn-copy-yt-client-secret');
+    if (btnCopySec) {
+      btnCopySec.addEventListener('click', async () => {
+        const val = (document.getElementById('modal-yt-client-secret')?.value || GoogleAuthService.getClientSecret()).trim();
+        try {
+          await navigator.clipboard.writeText(val);
+          this.showToast('✓ Client Secret কপি করা হয়েছে!', 'success');
+        } catch {
+          prompt('কপি করতে Ctrl+C চাপুন:', val);
+        }
+      });
+    }
+
     // 1. Google 1-Click Button
     document.getElementById('btn-trigger-google-oauth').addEventListener('click', async () => {
       const btn = document.getElementById('btn-trigger-google-oauth');
-      const clientIdVal = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
-      const clientSecretVal = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
-      if (clientIdVal) GoogleAuthService.setClientId(clientIdVal);
-      if (clientSecretVal) GoogleAuthService.setClientSecret(clientSecretVal);
+      let clientIdVal = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
+      let clientSecretVal = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
+      
+      if (!clientIdVal || clientIdVal.includes('18i1kra158') || !clientIdVal.includes('.apps.googleusercontent.com')) {
+        clientIdVal = GoogleAuthService.getClientId();
+      }
+      if (!clientSecretVal || clientSecretVal.includes('•') || clientSecretVal.includes('*') || clientSecretVal.length < 10) {
+        clientSecretVal = GoogleAuthService.getClientSecret();
+      }
+      GoogleAuthService.setClientId(clientIdVal);
+      GoogleAuthService.setClientSecret(clientSecretVal);
 
       btn.disabled = true;
-      btn.innerHTML = 'Connecting to Google OAuth...';
+      btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Connecting to Google OAuth...';
 
       try {
         const result = await GoogleAuthService.connectYouTubeChannel(project);
@@ -2592,20 +2662,19 @@ class OmniFlowApp {
           return;
         }
 
-        const clientIdInput = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
-        const clientSecretInput = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
+        let clientIdInput = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
+        let clientSecretInput = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
 
-        if (!clientIdInput || !clientSecretInput) {
-          if (statusBox) {
-            statusBox.style.display = 'block';
-            statusBox.innerHTML = `
-              <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:8px 10px; font-size:0.78rem; color:#EF4444; font-weight:600;">
-                ⚠️ অনুগ্রহ করে Google Client ID এবং Client Secret ইনপুট দিন। যে Client ID ও Secret দিয়ে Refresh Token সংগ্রহ করেছিলেন, সেগুলো এখানে পেস্ট করুন।
-              </div>
-            `;
-          }
-          alert('অনুগ্রহ করে Google Client ID এবং Client Secret পূরণ করুন।');
-          return;
+        // Auto-heal typos or missing credentials
+        if (!clientIdInput || clientIdInput.includes('18i1kra158') || !clientIdInput.includes('.apps.googleusercontent.com')) {
+          clientIdInput = GoogleAuthService.getClientId();
+          const el = document.getElementById('modal-yt-client-id');
+          if (el) el.value = clientIdInput;
+        }
+        if (!clientSecretInput || clientSecretInput.includes('•') || clientSecretInput.includes('*') || clientSecretInput.length < 10) {
+          clientSecretInput = GoogleAuthService.getClientSecret();
+          const el = document.getElementById('modal-yt-client-secret');
+          if (el) el.value = clientSecretInput;
         }
 
         // Cache in browser storage for instant reuse
@@ -2670,10 +2739,22 @@ class OmniFlowApp {
           this.refreshIcons();
           if (statusBox) {
             statusBox.innerHTML = `
-              <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#EF4444; font-weight:600;">
-                ত্রুটি: ${err.message}
+              <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:6px; padding:10px 12px; font-size:0.78rem; color:#EF4444; font-weight:600; line-height:1.45;">
+                <div style="margin-bottom:6px;">❌ <strong>ত্রুটি:</strong> ${err.message}</div>
+                <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(239, 68, 68, 0.3);">
+                  <div style="color:var(--text-primary); font-size:0.75rem; margin-bottom:6px; font-weight:700;">👉 সবচেয়ে সহজ সমাধান (কোনো কোড ছাড়া):</div>
+                  <button type="button" class="btn btn-sm btn-primary" id="btn-err-1click-fallback" style="background:#EF4444; border-color:#EF4444; width:100%; font-weight:700; padding:7px;">
+                    🔄 ১-ক্লিকে Google Login দিয়ে চালু করুন
+                  </button>
+                </div>
               </div>
             `;
+            const fallbackBtn = document.getElementById('btn-err-1click-fallback');
+            if (fallbackBtn) {
+              fallbackBtn.addEventListener('click', () => {
+                document.getElementById('btn-trigger-google-oauth')?.click();
+              });
+            }
           }
         }
       });
