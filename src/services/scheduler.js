@@ -359,8 +359,8 @@ export class SchedulerService {
     let ytToken = (options.youtubeToken || options.ytToken || ytAccount?.accessToken || ytAccount?.token || GoogleAuthService.getYouTubeToken(project) || '').trim();
 
     if (!isSimulated) {
-      const fbConfigured = !!(fbToken || fbAccount?.tokenConfigured);
-      const ytConfigured = !!(ytToken || ytAccount?.tokenConfigured);
+      const fbConfigured = !!(fbToken || fbAccount?.tokenConfigured || fbAccount?.connected);
+      const ytConfigured = !!(ytToken || ytAccount?.tokenConfigured || ytAccount?.hasRefreshToken || ytAccount?.connected);
 
       if (fbAccount && !fbConfigured) {
         throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token অনুপস্থিত। ফেসবুকে পোস্ট করতে Access Token দিন বা পেজ কানেক্ট করুন।');
@@ -391,7 +391,7 @@ export class SchedulerService {
           const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
           onProgress({ step: 4, percent: 75, message: `Facebook Page "${pageName}"-এ আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
 
-          let pageToken = fbToken;
+          let pageToken = fbToken === 'server_vault_fb_token' ? '' : fbToken;
           let uploadedVideoId = null;
           let directErrorMsg = null;
 
@@ -434,7 +434,8 @@ export class SchedulerService {
             formData.append('description', video.caption || video.title || '');
             formData.append('source', fileBlob, video.title || 'video.mp4');
 
-            const uploadRes = await fetch(`/api/facebook/upload-video?pageId=${encodeURIComponent(targetPageId)}&token=${encodeURIComponent(pageToken)}`, {
+            const relayUrl = `/api/facebook/upload-video?pageId=${encodeURIComponent(targetPageId)}${pageToken ? `&token=${encodeURIComponent(pageToken)}` : ''}`;
+            const uploadRes = await fetch(relayUrl, {
               method: 'POST',
               body: formData
             });
@@ -484,7 +485,7 @@ export class SchedulerService {
               title: video.title,
               description: video.caption
             },
-            ytToken
+            ytToken === 'server_vault_yt_token' ? null : ytToken
           );
           externalUrls['YouTube Shorts'] = ytResult.postUrl;
           console.log('[Scheduler] YouTube Shorts Upload Success:', ytResult.postUrl);

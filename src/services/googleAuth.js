@@ -279,11 +279,12 @@ export class GoogleAuthService {
   }
 
   /**
-   * Retrieves active YouTube Access Token (if cached for current session)
+   * Retrieves active YouTube Access Token (if cached for current session or server vault)
    */
   static getYouTubeToken(project) {
     const account = project?.socialAccounts?.find(a => a.id === 'youtube');
-    return account?.accessToken || account?.token || '';
+    const localTok = typeof localStorage !== 'undefined' ? (localStorage.getItem('omni_google_access_token') || '') : '';
+    return account?.accessToken || account?.token || localTok || (account?.tokenConfigured || account?.hasRefreshToken || account?.connected ? 'server_vault_yt_token' : '');
   }
 
   /**
@@ -331,7 +332,17 @@ export class GoogleAuthService {
       account.connected = true;
       account.active = true;
       account.tokenConfigured = true;
-      if (cleanRefresh) account.hasRefreshToken = true;
+      if (cleanToken && !cleanToken.startsWith('1//')) {
+        account.accessToken = cleanToken;
+        account.token = cleanToken;
+        if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem('omni_google_access_token', cleanToken); } catch (e) {}
+        }
+      }
+      if (cleanRefresh) {
+        account.hasRefreshToken = true;
+        account.refreshToken = cleanRefresh;
+      }
       account.channelId = account.channelId || 'UCCOo5jxEtLRgJQUkBMnt-QQ';
       account.channelTitle = account.channelTitle || 'chiku bd';
       account.handle = account.handle || '@chikubd';
@@ -452,7 +463,8 @@ export class GoogleAuthService {
 
     // Server-side relay with automated pre-flight token refresh
     try {
-      const relayUrl = `/api/youtube/upload-video?title=${encodeURIComponent(title || '')}&description=${encodeURIComponent(description || '')}${accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''}`;
+      const cleanToken = accessToken && accessToken !== 'server_vault_yt_token' ? accessToken : null;
+      const relayUrl = `/api/youtube/upload-video?title=${encodeURIComponent(title || '')}&description=${encodeURIComponent(description || '')}${cleanToken ? `&token=${encodeURIComponent(cleanToken)}` : ''}`;
       const relayRes = await fetch(relayUrl, {
         method: 'POST',
         headers: {

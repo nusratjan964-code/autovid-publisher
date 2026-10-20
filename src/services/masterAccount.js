@@ -181,8 +181,10 @@ export function getMasterChikuBdProject() {
         connected: true,
         active: true,
         tokenConfigured: true,
+        isPermanent: true,
+        autoRenew: true,
         followers: '12.4K',
-        lastPost: 'Today'
+        lastPost: 'Ready'
       },
       {
         id: 'youtube',
@@ -195,8 +197,9 @@ export function getMasterChikuBdProject() {
         connected: true,
         active: true,
         tokenConfigured: true,
+        hasRefreshToken: true,
         followers: '8.5K',
-        lastPost: 'Today'
+        lastPost: 'Ready'
       },
       { id: 'insta', name: 'Instagram Reels', icon: 'instagram', color: '#E1306C', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },
       { id: 'tiktok', name: 'TikTok', icon: 'video', color: '#000000', handle: '', connected: false, active: false, followers: '0', lastPost: 'Never' },

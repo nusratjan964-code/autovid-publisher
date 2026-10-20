@@ -162,15 +162,25 @@ export class SocialManagerService {
     let account = project.socialAccounts.find(a => a.id === 'facebook');
     const cleanHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${(pageName || 'chiku.bd').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
+    const cleanToken = (token || '').trim();
+    if (cleanToken && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('omni_fb_page_token', cleanToken);
+        localStorage.setItem('omni_fb_access_token', cleanToken);
+      } catch (e) {}
+    }
+
     if (!account) {
       account = {
         id: 'facebook',
-        name: pageName || 'Facebook Page',
+        name: pageName || 'Facebook Reels & Page',
         icon: 'facebook',
         color: '#1877F2',
         handle: cleanHandle,
         pageId: pageId || '1309863422219233',
         pageName: pageName || 'Chiku bd',
+        accessToken: cleanToken || undefined,
+        token: cleanToken || undefined,
         tokenConfigured: true,
         expiresAt: expiresAt || 'Never (চিরস্থায়ী অটো-রিনিউ সক্রিয়)',
         isPermanent: true,
@@ -190,6 +200,10 @@ export class SocialManagerService {
       account.pageId = pageId || account.pageId || '1309863422219233';
       account.pageName = pageName || account.pageName || 'Chiku bd';
       account.handle = cleanHandle;
+      if (cleanToken) {
+        account.accessToken = cleanToken;
+        account.token = cleanToken;
+      }
       account.tokenConfigured = true;
       account.expiresAt = expiresAt || 'Never (চিরস্থায়ী অটো-রিনিউ সক্রিয়)';
       account.isPermanent = true;
@@ -309,17 +323,32 @@ export class SocialManagerService {
   }
 
   /**
-   * Get active Facebook Page token from state or localStorage
+   * Get active Facebook Page token from state, localStorage, or server vault indicator
    */
   static getFacebookToken(project) {
     const account = project?.socialAccounts?.find(a => a.id === 'facebook');
-    return account?.accessToken || account?.token || '';
+    const localTok = typeof localStorage !== 'undefined' ? (localStorage.getItem('omni_fb_page_token') || localStorage.getItem('omni_fb_access_token') || '') : '';
+    return account?.accessToken || account?.token || localTok || (account?.tokenConfigured || account?.connected ? 'server_vault_fb_token' : '');
   }
 
   static setFacebookToken(project, token) {
     const account = project?.socialAccounts?.find(a => a.id === 'facebook');
+    const cleanToken = (token || '').trim();
     if (account) {
+      if (cleanToken) {
+        account.accessToken = cleanToken;
+        account.token = cleanToken;
+        if (typeof localStorage !== 'undefined') {
+          try {
+            localStorage.setItem('omni_fb_page_token', cleanToken);
+            localStorage.setItem('omni_fb_access_token', cleanToken);
+          } catch (e) {}
+        }
+      }
       account.tokenConfigured = true;
+      account.connected = true;
+      account.active = true;
+      account.isPermanent = true;
     }
   }
 }

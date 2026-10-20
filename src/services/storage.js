@@ -29,12 +29,8 @@ class StorageService {
       if (data) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed?.projects)) {
-          if (typeof localStorage !== 'undefined') {
-            try {
-              localStorage.removeItem('omni_fb_page_token');
-              localStorage.removeItem('omni_google_access_token');
-            } catch (e) {}
-          }
+          const cachedFbToken = (typeof localStorage !== 'undefined' ? (localStorage.getItem('omni_fb_page_token') || localStorage.getItem('omni_fb_access_token')) : '') || MASTER_FB_TOKEN || '';
+          const cachedYtToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '') || '';
 
           // Ensure Chiku bd project is present if user is md nahid or if projects have 0 videos
           const isNahid = (parsed.currentUser?.email || '').toLowerCase().includes('nahid') || 
@@ -54,10 +50,13 @@ class StorageService {
             if (Array.isArray(p.socialAccounts)) {
               p.socialAccounts.forEach(a => {
                 if (a.id === 'facebook') {
-                  const tokenToUse = cachedFbToken || MASTER_FB_TOKEN;
-                  a.accessToken = tokenToUse;
-                  a.token = tokenToUse;
+                  const tokenToUse = a.accessToken || a.token || cachedFbToken || '';
+                  if (tokenToUse) {
+                    a.accessToken = tokenToUse;
+                    a.token = tokenToUse;
+                  }
                   a.tokenConfigured = true;
+                  a.isPermanent = true;
                   if (a.name === 'Facebook Reels') {
                     a.name = 'Facebook Reels & Page';
                   }
@@ -68,15 +67,17 @@ class StorageService {
                   if (a.active === undefined) a.active = true;
                 }
                 if (a.id === 'youtube') {
+                  const ytToUse = a.accessToken || a.token || cachedYtToken || '';
+                  if (ytToUse) {
+                    a.accessToken = ytToUse;
+                    a.token = ytToUse;
+                  }
                   if (a.connected === undefined) {
                     a.connected = true;
                     a.active = true;
                   }
-                  if (cachedYtToken) {
-                    a.accessToken = cachedYtToken;
-                    a.token = cachedYtToken;
-                  }
-                  a.tokenConfigured = !!(a.accessToken || a.token || cachedYtToken);
+                  a.tokenConfigured = true;
+                  a.hasRefreshToken = true;
                 }
               });
             }

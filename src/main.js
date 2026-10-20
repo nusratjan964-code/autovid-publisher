@@ -3170,7 +3170,10 @@ class OmniFlowApp {
       const fbToken = SocialManagerService.getFacebookToken(project);
       const ytToken = GoogleAuthService.getYouTubeToken(project);
 
-      if ((activeFb && !fbToken) || (activeYt && !ytToken)) {
+      const isFbConfigured = !activeFb || activeFb.tokenConfigured || activeFb.connected || !!fbToken;
+      const isYtConfigured = !activeYt || activeYt.tokenConfigured || activeYt.hasRefreshToken || activeYt.connected || !!ytToken;
+
+      if (!isFbConfigured || !isYtConfigured) {
         this.closeModal();
         this.openPublishTokenModal(project, videoId, 'ফেসবুক এবং ইউটিউবে একসাথে লাইভ ভিডিও পোস্ট করতে Token প্রয়োজন।');
         return;
@@ -3452,7 +3455,10 @@ class OmniFlowApp {
         const fbToken = SocialManagerService.getFacebookToken(project);
         const ytToken = GoogleAuthService.getYouTubeToken(project);
 
-        if ((activeFb && !fbToken) || (activeYt && !ytToken)) {
+        const isFbConfigured = !activeFb || activeFb.tokenConfigured || activeFb.connected || !!fbToken;
+        const isYtConfigured = !activeYt || activeYt.tokenConfigured || activeYt.hasRefreshToken || activeYt.connected || !!ytToken;
+
+        if (!isFbConfigured || !isYtConfigured) {
           this.openPublishTokenModal(project, vidId, 'ফেসবুক এবং ইউটিউবে একসাথে লাইভ ভিডিও পোস্ট করতে Token প্রয়োজন।');
           return;
         }
@@ -3965,11 +3971,14 @@ class OmniFlowApp {
     const activeYt = activeChannels.find(a => a.id === 'youtube');
     const ytToken = GoogleAuthService.getYouTubeToken(project);
 
+    const isFbConfigured = !activeFb || activeFb.tokenConfigured || activeFb.connected || !!fbToken;
+    const isYtConfigured = !activeYt || activeYt.tokenConfigured || activeYt.hasRefreshToken || activeYt.connected || !!ytToken;
+
     if (!forceSim) {
-      if ((activeFb && !fbToken) || (activeYt && !ytToken)) {
+      if (!isFbConfigured || !isYtConfigured) {
         const missing = [];
-        if (activeFb && !fbToken) missing.push('Facebook Access Token');
-        if (activeYt && !ytToken) missing.push('YouTube Access Token');
+        if (!isFbConfigured) missing.push('Facebook Access Token');
+        if (!isYtConfigured) missing.push('YouTube Access Token');
         this.openPublishTokenModal(project, null, `${missing.join(' এবং ')} অনুপস্থিত। ফেসবুক এবং ইউটিউবে একসাথে লাইভ ভিডিও আপলোড করতে টোকেন দিন অথবা টেস্ট করুন।`);
         return;
       }
@@ -4012,6 +4021,12 @@ class OmniFlowApp {
     const ytAccount = project.socialAccounts?.find(a => a.id === 'youtube');
     const ytChannelTitle = ytAccount?.channelTitle || ytAccount?.handle || 'chiku bd';
     const existingYtToken = GoogleAuthService.getYouTubeToken(project);
+
+    const isFbConfigured = (existingFbToken && existingFbToken !== 'server_vault_fb_token') || fbAccount?.tokenConfigured || fbAccount?.connected;
+    const isYtConfigured = (existingYtToken && existingYtToken !== 'server_vault_yt_token') || ytAccount?.tokenConfigured || ytAccount?.hasRefreshToken || ytAccount?.connected;
+
+    const fbDisplayToken = (existingFbToken && existingFbToken !== 'server_vault_fb_token') ? existingFbToken : '';
+    const ytDisplayToken = (existingYtToken && existingYtToken !== 'server_vault_yt_token') ? existingYtToken : '';
 
     this.openModal(`
       <div class="modal-backdrop">
@@ -4082,8 +4097,8 @@ class OmniFlowApp {
                     </div>
                   </div>
                 </div>
-                <span class="badge ${existingFbToken ? 'badge-success' : 'badge-warning'}">
-                  ${existingFbToken ? 'Token Configured' : 'Token Required'}
+                <span class="badge ${isFbConfigured ? 'badge-success' : 'badge-warning'}">
+                  ${isFbConfigured ? '✓ চিরস্থায়ী টোকেন সক্রিয় (Lifetime Active)' : 'টোকেন প্রয়োজন'}
                 </span>
               </div>
 
@@ -4097,7 +4112,7 @@ class OmniFlowApp {
                     <i data-lucide="external-link" style="width:11px; height:11px;"></i>
                   </a>
                 </div>
-                <textarea class="form-input" id="quick-publish-token" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical;" placeholder="নতুন Access Token দিন (EAA... বা EAAT...)">${existingFbToken || ''}</textarea>
+                <textarea class="form-input" id="quick-publish-token" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical;" placeholder="${isFbConfigured ? '✓ ফেসবুক পেজ ভেরিফাইড ও আজীবন অটো-রিনিউ সক্রিয় (নতুন টোকেন দিতে চাইলে এখানে পেস্ট করুন)' : 'নতুন Access Token দিন (EAA... বা EAAT...)'}">${fbDisplayToken}</textarea>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
                   <button type="button" class="btn btn-outline btn-sm" id="btn-modal-test-facebook" style="border-color:#1877F2; color:#1877F2; font-size:0.78rem; display:flex; align-items:center; gap:4px; padding:4px 10px;">
                     <i data-lucide="shield-check" style="width:13px; height:13px;"></i>
@@ -4125,8 +4140,8 @@ class OmniFlowApp {
                     </div>
                   </div>
                 </div>
-                <span id="modal-yt-badge" class="badge ${existingYtToken ? 'badge-success' : 'badge-warning'}">
-                  ${existingYtToken ? 'OAuth Ready' : 'Authorization Needed'}
+                <span id="modal-yt-badge" class="badge ${isYtConfigured ? 'badge-success' : 'badge-warning'}">
+                  ${isYtConfigured ? '✓ YouTube Ready (Auto-Refresh Active)' : 'Authorization Needed'}
                 </span>
               </div>
 
@@ -4141,7 +4156,7 @@ class OmniFlowApp {
               </div>
 
               <div style="display:flex; gap:6px;">
-                <input type="text" class="form-input" id="quick-youtube-token" value="${existingYtToken || ''}" placeholder="ya29... (Google Access Token পেস্ট করুন)" style="font-family:monospace; font-size:0.8rem; flex:1;" />
+                <input type="text" class="form-input" id="quick-youtube-token" value="${ytDisplayToken}" placeholder="${isYtConfigured ? '✓ YouTube চ্যানেল কানেক্টেড (সার্ভার অফলাইন রিফ্রেশ সক্রিয়)' : 'ya29... (Google Access Token পেস্ট করুন)'}" style="font-family:monospace; font-size:0.8rem; flex:1;" />
                 <button type="button" class="btn btn-outline btn-sm" id="btn-modal-test-youtube" style="border-color:#FF0000; color:#FF0000; font-size:0.78rem; white-space:nowrap;">
                   টোকেন টেস্ট
                 </button>
@@ -4382,16 +4397,25 @@ class OmniFlowApp {
 
     // 1. Live Post with tokens and binary video
     document.getElementById('btn-submit-token-and-publish').addEventListener('click', async () => {
-      const fbToken = (document.getElementById('quick-publish-token')?.value || existingFbToken || '').trim();
-      const ytToken = (document.getElementById('quick-youtube-token')?.value || existingYtToken || '').trim();
+      const inputFb = (document.getElementById('quick-publish-token')?.value || '').trim();
+      const inputYt = (document.getElementById('quick-youtube-token')?.value || '').trim();
 
-      if (fbToken) {
-        SocialManagerService.setFacebookToken(project, fbToken);
+      const fbToken = inputFb || (existingFbToken && existingFbToken !== 'server_vault_fb_token' ? existingFbToken : (isFbConfigured ? 'server_vault_fb_token' : ''));
+      const ytToken = inputYt || (existingYtToken && existingYtToken !== 'server_vault_yt_token' ? existingYtToken : (isYtConfigured ? 'server_vault_yt_token' : ''));
+
+      if (inputFb) {
+        SocialManagerService.setFacebookToken(project, inputFb);
       }
-      if (ytToken) {
-        GoogleAuthService.setYouTubeToken(project, ytToken);
+      if (inputYt) {
+        GoogleAuthService.setYouTubeToken(project, inputYt);
       }
       storage.saveState();
+
+      if (!selectedFileBlob && !currentBlob && targetVideo) {
+        try {
+          selectedFileBlob = await SchedulerService.resolveVideoBlob(targetVideo, project);
+        } catch (e) {}
+      }
 
       if (!selectedFileBlob && !currentBlob) {
         alert('ফেসবুক এবং ইউটিউবে আসল ভিডিও আপলোড করতে অনুগ্রহ করে ভিডিও ফাইলটি সিলেক্ট করুন (File Picker থেকে)।');

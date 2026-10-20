@@ -18,7 +18,10 @@ export default async function handler(req, res) {
   const query = req.query || {};
   const activePage = getActivePageSanitized();
   const pageId = (query.pageId || activePage?.pageId || process.env.FB_PAGE_ID || '').trim();
-  const providedToken = (query.token || req.headers['x-fb-token'] || getPageAccessToken(pageId) || '').trim();
+  let providedToken = (query.token || req.headers['x-fb-token'] || '').trim();
+  if (!providedToken || providedToken === 'server_vault_fb_token' || providedToken === 'undefined') {
+    providedToken = (getPageAccessToken(pageId) || '').trim();
+  }
 
   if (!pageId) {
     return res.status(400).json({

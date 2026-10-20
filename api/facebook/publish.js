@@ -52,7 +52,10 @@ export default async function handler(req, res) {
   const activePage = getActivePageSanitized();
   const pageId = cleanPageId(rawPageId || activePage?.pageId || process.env.FB_PAGE_ID || '');
   const postText = (message || caption || '').trim();
-  const token = (requestToken || req.headers['x-fb-token'] || getPageAccessToken(pageId) || '').trim();
+  let token = (requestToken || req.headers['x-fb-token'] || '').trim();
+  if (!token || token === 'server_vault_fb_token' || token === 'undefined') {
+    token = (getPageAccessToken(pageId) || '').trim();
+  }
 
   // Validate Page ID presence
   if (!pageId) {

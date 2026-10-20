@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   const query = req.query || {};
   const directToken = (query.token || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '').trim();
 
-  let token = directToken;
+  let token = (directToken && directToken !== 'server_vault_yt_token' && directToken !== 'undefined') ? directToken : '';
   if (!token) {
     try {
       token = await getValidYouTubeAccessToken();
