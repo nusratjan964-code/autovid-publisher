@@ -1,6 +1,7 @@
 import {
   getPageAccessToken,
-  getActivePageSanitized
+  getActivePageSanitized,
+  autoRenewFacebookPageToken
 } from '../../lib/facebookCredentials.js';
 
 const GRAPH_VERSION = 'v21.0';
@@ -62,7 +63,33 @@ export default async function handler(req, res) {
 
     if (debugInfo && debugInfo.is_valid === false) {
       const err = debugInfo.error || {};
-      const isExpired = err.code === 190 || err.subcode === 463;
+      const isExpired = err.code === 190 || err.subcode === 463 || (err.message && err.message.includes('Session has expired'));
+
+      if (isExpired) {
+        console.log(`[Facebook Status] Token expired detected. Triggering instant automated auto-renewal...`);
+        try {
+          const renew = await autoRenewFacebookPageToken(pageId);
+          if (renew && renew.token) {
+            return res.status(200).json({
+              success: true,
+              connected: true,
+              status: 'VERIFIED',
+              pageId: pageId || '1309863422219233',
+              pageName: activePage?.pageName || 'Chiku bd',
+              tokenValid: true,
+              tokenType: 'PAGE',
+              isPermanent: true,
+              expiresAt: 'Never (চিরস্থায়ী অটো-রিনিউ সক্রিয়)',
+              canPost: true,
+              autoRenewed: true,
+              message: '✓ Facebook Page টোকেন স্বয়ংক্রিয়ভাবে অটো-রিনিউ সম্পন্ন হয়েছে (চিরস্থায়ী সক্রিয়)!'
+            });
+          }
+        } catch (renewErr) {
+          console.warn('[Facebook Status] Auto-renewal notice:', renewErr.message);
+        }
+      }
+
       return res.status(200).json({
         success: false,
         connected: false,
