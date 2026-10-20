@@ -177,6 +177,10 @@ class OmniFlowApp {
                   <span>Add Project</span>
                 </button>
               </div>
+              <div style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); border-radius:20px; padding:4px 10px; display:inline-flex; align-items:center; gap:6px; font-size:0.75rem; font-weight:700; color:#10B981;" title="Auto-renewal token engine is active">
+                <span style="width:7px; height:7px; border-radius:50%; background:#10B981; display:inline-block; box-shadow:0 0 8px #10B981;"></span>
+                <span>Token Auto-Renew v2.1 Active</span>
+              </div>
             </div>
 
             <div class="header-right">
