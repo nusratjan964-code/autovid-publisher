@@ -2320,84 +2320,86 @@ class OmniFlowApp {
               </button>
             </div>
 
-            <!-- Option 1: 1-Click Instant Switch to chiku bd -->
-            <div style="margin-bottom:12px;">
-              <button class="btn btn-primary" id="btn-quick-activate-yt" style="width:100%; background:linear-gradient(135deg, #10b981 0%, #059669 100%); border:none; padding:11px; font-weight:700; font-size:0.88rem; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(16, 185, 129, 0.25);">
-                <i data-lucide="check-circle-2"></i>
-                <span>⚡ ১-ক্লিকে "chiku bd" (@chikubd) তে পরিবর্তন করুন</span>
-              </button>
-            </div>
-
-            <!-- Option 2: Custom Channel Name & Handle Edit Form -->
-            <div style="background:var(--bg-card); border:1.5px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
-              <h5 style="margin:0 0 8px; font-size:0.84rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
-                <i data-lucide="edit-3" style="width:14px; height:14px; color:#4f46e5;"></i>
-                <span>অন্য যেকোনো চ্যানেলের নাম ও হ্যান্ডেল লিখুন:</span>
-              </h5>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-                <div>
-                  <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেলের নাম (Title)</label>
-                  <input type="text" class="form-input" id="input-custom-yt-title" value="${ytAccount?.channelTitle === 'md nahid' ? 'chiku bd' : (ytAccount?.channelTitle || 'chiku bd')}" placeholder="যেমন: chiku bd" style="font-size:0.82rem;" />
-                </div>
-                <div>
-                  <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেল হ্যান্ডেল (@Handle)</label>
-                  <input type="text" class="form-input" id="input-custom-yt-handle" value="${ytAccount?.handle === '@mdnahid-du5ln' ? '@chikubd' : (ytAccount?.handle || '@chikubd')}" placeholder="যেমন: @chikubd" style="font-size:0.82rem;" />
-                </div>
-              </div>
-              <button type="button" class="btn btn-outline btn-sm" id="btn-save-custom-yt-channel" style="width:100%; border-color:#4f46e5; color:#4f46e5; font-weight:700; gap:6px;">
-                <i data-lucide="save"></i>
-                <span>এই চ্যানেলটি সেভ ও সক্রিয় করুন (Save & Switch)</span>
-              </button>
-            </div>
-
-            <!-- Option 3: Switch Google Account Button -->
-            <div style="margin-bottom:14px;">
-              <button class="btn btn-outline" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#FF0000; font-weight:700; padding:10px; display:flex; align-items:center; justify-content:center; gap:8px;">
-                <i data-lucide="user-check"></i>
-                <span>🔄 1-Click Google OAuth দিয়ে লগইন করুন (Auto-Refresh চালু হবে)</span>
-              </button>
-              <div style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-top:4px;">
-                লগইন পপআপ আসলে আপনার মূল Gmail একাউন্ট সিলেক্ট করবেন।
-              </div>
-            </div>
-
-            <!-- Option 4: Permanent Google Refresh Token (NEVER EXPIRES) -->
-            <div style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.02)); border:1.5px solid rgba(16, 185, 129, 0.35); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <label style="font-size:0.82rem; font-weight:800; color:#059669; margin:0; display:flex; align-items:center; gap:6px;">
-                  <i data-lucide="shield-check" style="width:15px; height:15px;"></i>
-                  <span>চিরস্থায়ী Google Refresh Token (1//...) [কখনোই Expire হবে না]:</span>
+            <!-- 🌟 Option 1 (PRIMARY): Permanent Google Refresh Token (NEVER EXPIRES) -->
+            <div style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.03)); border:2px solid #10b981; border-radius:var(--radius-md); padding:14px 16px; margin-bottom:14px; box-shadow:0 4px 14px rgba(16, 185, 129, 0.15);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <label style="font-size:0.86rem; font-weight:800; color:#065f46; margin:0; display:flex; align-items:center; gap:6px;">
+                  <i data-lucide="shield-check" style="width:18px; height:18px; color:#10b981;"></i>
+                  <span>চিরস্থায়ী Refresh Token (1//...) [আজীবন অটো-রিনিউ]:</span>
                 </label>
-                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.73rem; color:#059669; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:700;">
+                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.74rem; color:#059669; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:700; background:rgba(16, 185, 129, 0.15); padding:3px 8px; border-radius:4px;">
                   <span>OAuth Playground</span>
                   <i data-lucide="external-link" style="width:11px; height:11px;"></i>
                 </a>
               </div>
               <div style="font-size:0.74rem; color:var(--text-secondary); margin-bottom:8px; line-height:1.4;">
-                Google OAuth Playground Step 2-তে <strong>"Exchange authorization code for tokens"</strong> ক্লিক করার পর প্রাপ্ত <strong>Refresh token (1//...)</strong> টি এখানে পেস্ট করুন। সিস্টেম নিজে থেকেই প্রতি ঘণ্টায় নতুন টোকেন তৈরি করবে, আপনার আর কখনো আপডেট করা লাগবে না!
+                Google OAuth Playground-এর Step 2-তে <strong>"Exchange authorization code for tokens"</strong> বাটনে ক্লিক করলে যে <strong>Refresh token (যা <code style="font-weight:700; color:#065f46;">1//...</code> দিয়ে শুরু হয়)</strong> পাওয়া যায়, সেটি এখানে পেস্ট করুন। সার্ভার প্রতি ঘণ্টায় নিজে থেকে টোকেন তৈরি করবে, আপনার আর কখনো হাত দেওয়া লাগবে না!
               </div>
-              <textarea class="form-input" id="modal-yt-refresh-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="1//... (Google Refresh Token পেস্ট করুন)"></textarea>
+              <textarea class="form-input" id="modal-yt-refresh-token-input" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical; border:1.5px solid #10b981;" placeholder="1//... (Google Refresh Token এখানে পেস্ট করুন)"></textarea>
               <div id="yt-refresh-token-verify-status" style="margin-top:8px; display:none;"></div>
               <div style="margin-top:8px;">
-                <button type="button" class="btn btn-primary btn-sm" id="btn-save-yt-refresh-token" style="background:#059669; border-color:#059669; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-save-yt-refresh-token" style="background:#059669; border-color:#059669; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700; padding:9px;">
                   <i data-lucide="check-circle-2"></i>
-                  <span>চিরস্থায়ী Refresh Token সেভ ও সক্রিয় করুন</span>
+                  <span>✓ চিরস্থায়ী Refresh Token সেভ ও সক্রিয় করুন</span>
                 </button>
               </div>
             </div>
 
-            <!-- Option 5: Temporary Access Token Paste fallback -->
-            <details style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:14px;">
-              <summary style="cursor:pointer; font-weight:600; font-size:0.78rem; color:var(--text-secondary);">
-                (বিকল্প) সাধারণ Access Token (ya29... — ১ ঘণ্টার জন্য)
+            <!-- 🌟 Option 2: 1-Click Google OAuth Button -->
+            <div style="margin-bottom:14px;">
+              <button class="btn btn-outline" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#FF0000; font-weight:700; padding:10px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <i data-lucide="user-check"></i>
+                <span>🔄 1-Click Google Login দিয়ে কানেক্ট করুন (Auto-Refresh চালু হবে)</span>
+              </button>
+              <div style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-top:4px;">
+                পপআপ আসলে মূল Gmail সিলেক্ট করবেন।
+              </div>
+            </div>
+
+            <!-- 🌟 Option 3: Standard Access Token Paste (Also accepts 1// tokens) -->
+            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <label style="font-size:0.8rem; font-weight:700; color:var(--text-primary); margin:0;">
+                  Google OAuth Access Token বা Refresh Token:
+                </label>
+              </div>
+              <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="ya29... (Access Token) অথবা 1//... (Refresh Token পেস্ট করুন)">${existingToken || ''}</textarea>
+              <div style="font-size:0.71rem; color:var(--text-muted); margin-top:4px;">
+                💡 এখানে <code style="font-weight:600;">1//...</code> দিয়ে শুরু হওয়া Refresh Token পেস্ট করলেও সিস্টেম স্বয়ংক্রিয়ভাবে সেটিকে চিরস্থায়ী টোকেন হিসেবে রিনিউ করে নেবে।
+              </div>
+              <div id="yt-token-verify-status" style="margin-top:8px; display:none;"></div>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-verify-save-yt-token" style="background:#FF0000; border-color:#FF0000; flex:1; display:flex; align-items:center; justify-content:center; gap:6px;">
+                  <i data-lucide="check-circle-2"></i>
+                  <span>টোকেন যাচাই ও সেভ করুন</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Collapsible Channel Name & Handle Settings -->
+            <details style="background:var(--bg-card); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:12px;">
+              <summary style="cursor:pointer; font-weight:700; font-size:0.8rem; color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
+                <i data-lucide="edit-3" style="width:13px; height:13px; color:#4f46e5;"></i>
+                <span>চ্যানেলের নাম ও কাস্টম হ্যান্ডেল পরিবর্তন করুন (ঐচ্ছিক)</span>
               </summary>
-              <div style="margin-top:8px;">
-                <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="ya29... (Google Access Token পেস্ট করুন)">${existingToken || ''}</textarea>
-                <div id="yt-token-verify-status" style="margin-top:8px; display:none;"></div>
-                <div style="display:flex; gap:8px; margin-top:8px;">
-                  <button type="button" class="btn btn-primary btn-sm" id="btn-verify-save-yt-token" style="background:#FF0000; border-color:#FF0000; flex:1; display:flex; align-items:center; justify-content:center; gap:6px;">
-                    <i data-lucide="check-circle-2"></i>
-                    <span>অস্থায়ী টোকেন সেভ করুন</span>
+              <div style="margin-top:10px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                  <div>
+                    <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেলের নাম (Title)</label>
+                    <input type="text" class="form-input" id="input-custom-yt-title" value="${ytAccount?.channelTitle === 'md nahid' ? 'chiku bd' : (ytAccount?.channelTitle || 'chiku bd')}" placeholder="যেমন: chiku bd" style="font-size:0.82rem;" />
+                  </div>
+                  <div>
+                    <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেল হ্যান্ডেল (@Handle)</label>
+                    <input type="text" class="form-input" id="input-custom-yt-handle" value="${ytAccount?.handle === '@mdnahid-du5ln' ? '@chikubd' : (ytAccount?.handle || '@chikubd')}" placeholder="যেমন: @chikubd" style="font-size:0.82rem;" />
+                  </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-save-custom-yt-channel" style="flex:1; border-color:#4f46e5; color:#4f46e5; font-weight:700; gap:6px;">
+                    <i data-lucide="save"></i>
+                    <span>চ্যানেল সেভ করুন</span>
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-quick-activate-yt" style="background:#10b981; border:none; font-weight:700;">
+                    <span>⚡ 1-Click "chiku bd"</span>
                   </button>
                 </div>
               </div>
