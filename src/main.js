@@ -2094,20 +2094,6 @@ class OmniFlowApp {
         appId: appIdInput || undefined,
         appSecret: appSecretInput || undefined
       });
-      const resultBox = document.getElementById('fb-verification-results');
-      resultBox.style.display = 'block';
-      resultBox.innerHTML = `
-        <div style="background:var(--bg-subtle); padding:12px; border-radius:var(--radius-md); font-size:0.84rem; display:flex; align-items:center; gap:8px;">
-          <span>Contacting Meta Graph API v21.0 (/me/accounts & /debug_token)...</span>
-        </div>
-      `;
-
-      const btn = document.getElementById('btn-fb-discover');
-      const originalBtnText = btn.innerHTML;
-      btn.innerHTML = `<span>Discovering Pages...</span>`;
-      btn.disabled = true;
-
-      const discovery = await SocialManagerService.discoverFacebookPages(tokenInput);
       btn.innerHTML = originalBtnText;
       btn.disabled = false;
       this.refreshIcons();
