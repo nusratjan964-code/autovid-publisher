@@ -2,57 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import { Buffer } from 'node:buffer';
 
-const CREDENTIALS_FILE = path.join(process.cwd(), '.credentials_cache.json');
+import { getValidYouTubeAccessToken } from '../../lib/youtubeTokenManager.js';
 
-function loadCache() {
+async function resolveDriveToken(inputToken) {
+  if (inputToken) return inputToken;
   try {
-    if (fs.existsSync(CREDENTIALS_FILE)) {
-      return JSON.parse(fs.readFileSync(CREDENTIALS_FILE, 'utf8'));
-    }
-  } catch (e) {}
-  return {};
-}
-
-function saveCache(data) {
-  try {
-    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (e) {}
-}
-
-async function getRefreshedToken(cache) {
-  const yt = cache.youtube;
-  if (!yt || !yt.refreshToken) return yt?.accessToken || '';
-
-  try {
-    const clientId = process.env.VITE_GOOGLE_CLIENT_ID || cache.googleClientId || '';
-    const clientSecret = process.env.VITE_GOOGLE_CLIENT_SECRET || cache.googleClientSecret || '';
-
-    if (clientId && clientSecret) {
-      const res = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: yt.refreshToken,
-          grant_type: 'refresh_token'
-        }).toString()
-      });
-
-      const data = await res.json();
-      if (res.ok && data.access_token) {
-        yt.accessToken = data.access_token;
-        yt.updatedAt = new Date().toISOString();
-        cache.youtube = yt;
-        saveCache(cache);
-        return data.access_token;
-      }
-    }
+    return await getValidYouTubeAccessToken();
   } catch (e) {
-    console.warn('[Drive Scanner] Token refresh notice:', e.message);
+    return '';
   }
-
-  return yt?.accessToken || '';
 }
 
 function extractAllDriveTargets(rawInput) {
@@ -126,10 +84,9 @@ async function handleDriveDownload(req, res, queryParams) {
     return res.end(JSON.stringify({ success: false, error: 'FILE_ID_REQUIRED', message: 'File ID is required.' }));
   }
 
-  const cache = loadCache();
-  const token = inputToken || cache.youtube?.accessToken || (await getRefreshedToken(cache)) || '';
+  const token = await resolveDriveToken(inputToken);
   const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
-  const apiKey = queryParams.apiKey || cache.googleApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || DEFAULT_GOOGLE_API_KEY;
+  const apiKey = queryParams.apiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || DEFAULT_GOOGLE_API_KEY;
   const appReferer = req.headers['referer'] || req.headers['origin'] || 'https://autovid-publisher.vercel.app/';
 
   console.log(`[Drive Download Proxy] Fetching Drive file ${fileId} (Has Token: ${!!token}, Has Key: ${!!apiKey})...`);
@@ -301,14 +258,9 @@ export default async function handler(req, res) {
     });
   }
 
-  const cache = loadCache();
-  if (inputApiKey && inputApiKey !== cache.googleApiKey) {
-    cache.googleApiKey = inputApiKey;
-    saveCache(cache);
-  }
-  const token = inputToken || cache.youtube?.accessToken || (await getRefreshedToken(cache)) || '';
+  const token = await resolveDriveToken(inputToken);
   const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
-  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || cache.googleApiKey || DEFAULT_GOOGLE_API_KEY;
+  const apiKey = inputApiKey || process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || DEFAULT_GOOGLE_API_KEY;
   const appReferer = req.headers['referer'] || req.headers['origin'] || 'https://autovid-publisher.vercel.app/';
   const driveHeaders = {
     'Referer': appReferer,

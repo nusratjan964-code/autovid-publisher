@@ -1,3 +1,4 @@
+import './lib/envLoader.js';
 import { defineConfig } from 'vite';
 import fs from 'fs';
 import path from 'path';
@@ -26,6 +27,8 @@ function apiDevServerPlugin() {
             handlerModule = await import('./api/youtube/token.js');
           } else if (pathname === '/api/facebook/pages') {
             handlerModule = await import('./api/facebook/pages.js');
+          } else if (pathname === '/api/facebook/config') {
+            handlerModule = await import('./api/facebook/config.js');
           } else if (pathname === '/api/facebook/select-page') {
             handlerModule = await import('./api/facebook/select-page.js');
           } else if (pathname === '/api/facebook/upload-token') {

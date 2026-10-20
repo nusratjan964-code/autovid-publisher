@@ -5,7 +5,7 @@ export const DEFAULT_GOOGLE_CLIENT_ID = '489789622156-nokptei8ilkral58vf8vqopsbe
 export const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
 
 export class GoogleAuthService {
-  static tokenClient = null;
+  static codeClient = null;
 
   static getClientId() {
     return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
@@ -24,49 +24,8 @@ export class GoogleAuthService {
   }
 
   /**
-   * Initializes Google Identity Services token client
-   */
-  static initClient(onSuccess, onError) {
-    if (!this.isGoogleLoaded()) {
-      return false;
-    }
-
-    const clientId = this.getClientId();
-    if (!clientId) {
-      if (onError) onError(new Error('Google Client ID is missing. Please save your Client ID in the modal above.'));
-      return false;
-    }
-
-    try {
-      this.tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: [
-          'https://www.googleapis.com/auth/youtube.upload',
-          'https://www.googleapis.com/auth/youtube.readonly'
-        ].join(' '),
-        callback: async (tokenResponse) => {
-          if (tokenResponse.error) {
-            console.error('Google OAuth Token Error:', tokenResponse);
-            if (onError) onError(new Error(tokenResponse.error_description || tokenResponse.error));
-            return;
-          }
-          if (onSuccess) onSuccess(tokenResponse);
-        },
-        error_callback: (err) => {
-          console.warn('Google Token Client error_callback:', err);
-          if (onError) onError(new Error(err?.message || err?.type || 'Google popup was closed or blocked'));
-        }
-      });
-      return true;
-    } catch (e) {
-      console.error('Failed to init Google Token Client', e);
-      if (onError) onError(e);
-      return false;
-    }
-  }
-
-  /**
-   * 1-Click Trigger: Connect YouTube Channel via Google OAuth 2.0
+   * 1-Click Trigger: Connect YouTube Channel via Google OAuth 2.0 Authorization Code Flow
+   * Obtains an authorization code and securely exchanges it on the server for offline Refresh Token
    */
   static connectYouTubeChannel(project, options = {}) {
     return new Promise((resolve, reject) => {
@@ -74,8 +33,8 @@ export class GoogleAuthService {
       const timeoutId = setTimeout(() => {
         if (settled) return;
         settled = true;
-        reject(new Error('Google Authorization window was closed or timed out. If popup was blocked, please allow popups or use direct token/share settings.'));
-      }, 35000);
+        reject(new Error('Google Authorization window was closed or timed out. Please allow popups and try again.'));
+      }, 45000);
 
       const safeResolve = (val) => {
         if (settled) return;
@@ -97,58 +56,113 @@ export class GoogleAuthService {
         return;
       }
 
-      const executeFlow = () => {
-        // Method 1: Try Token Flow first for Drive & YouTube upload
+      const executeCodeFlow = () => {
         try {
-          this.executeTokenFlow(project, safeResolve, safeReject, options);
-        } catch (tokenErr) {
-          console.warn('[GoogleAuth] Token client notice, trying code flow:', tokenErr);
-          // Fallback: initCodeClient
-          if (window.google?.accounts?.oauth2?.initCodeClient) {
-            try {
-              const codeClient = window.google.accounts.oauth2.initCodeClient({
-                client_id: clientId,
-                scope: [
-                  'https://www.googleapis.com/auth/youtube.upload',
-                  'https://www.googleapis.com/auth/youtube.readonly'
-                ].join(' '),
-                ux_mode: 'popup',
-                callback: async (response) => {
-                  if (response.error) {
-                    safeReject(new Error(response.error_description || response.error));
-                    return;
-                  }
-                  if (response.code) {
-                    try {
-                      const tokenRes = await fetch('/api/youtube/token', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ code: response.code })
-                      });
-                      const tokenData = await tokenRes.json();
-                      if (!tokenRes.ok || !tokenData.success) {
-                        throw new Error(tokenData.error || 'Failed to exchange authorization code');
-                      }
-
-                      this.setYouTubeToken(project, tokenData.accessToken);
-                      storage.saveState();
-                      safeResolve({
-                        success: true,
-                        accessToken: tokenData.accessToken
-                      });
-                    } catch (exchangeErr) {
-                      safeReject(exchangeErr);
-                    }
-                  }
-                }
-              });
-              codeClient.requestCode();
-            } catch (err) {
-              safeReject(err);
-            }
-          } else {
-            safeReject(tokenErr);
+          if (!window.google?.accounts?.oauth2?.initCodeClient) {
+            throw new Error('Google Identity Services Code Client is not available in browser.');
           }
+
+          const client = window.google.accounts.oauth2.initCodeClient({
+            client_id: clientId,
+            scope: [
+              'https://www.googleapis.com/auth/youtube.upload',
+              'https://www.googleapis.com/auth/youtube.readonly'
+            ].join(' '),
+            ux_mode: 'popup',
+            select_account: true,
+            callback: async (response) => {
+              if (response.error) {
+                console.error('[GoogleAuth] OAuth Code Error:', response);
+                safeReject(new Error(response.error_description || response.error));
+                return;
+              }
+
+              if (!response.code) {
+                safeReject(new Error('Google did not return an authorization code.'));
+                return;
+              }
+
+              try {
+                console.log('[GoogleAuth] Authorization code received. Exchanging on server...');
+                const tokenRes = await fetch('/api/youtube/token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    code: response.code,
+                    redirectUri: 'postmessage'
+                  })
+                });
+
+                const tokenData = await tokenRes.json();
+                if (!tokenRes.ok || !tokenData.success) {
+                  throw new Error(tokenData.error || 'Server failed to exchange authorization code.');
+                }
+
+                // Update Project State with sanitized account metadata
+                const channel = tokenData.channel || {};
+                let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
+                if (!ytAccount) {
+                  ytAccount = {
+                    id: 'youtube',
+                    name: 'YouTube Shorts',
+                    icon: 'youtube',
+                    color: '#FF0000',
+                    handle: '@chikubd',
+                    connected: true,
+                    active: true
+                  };
+                  project.socialAccounts.push(ytAccount);
+                }
+
+                ytAccount.connected = true;
+                ytAccount.active = true;
+                ytAccount.tokenConfigured = true;
+                ytAccount.hasRefreshToken = tokenData.hasRefreshToken ?? true;
+                ytAccount.channelId = channel.id || ytAccount.channelId || 'UCCOo5jxEtLRgJQUkBMnt-QQ';
+                ytAccount.channelTitle = channel.title || ytAccount.channelTitle || 'chiku bd';
+                ytAccount.handle = channel.customUrl || `@${(channel.title || 'chikubd').toLowerCase().replace(/\s+/g, '')}`;
+                ytAccount.avatar = channel.avatar || ytAccount.avatar || '';
+                ytAccount.followers = channel.subscribers || 'Active';
+                ytAccount.expiresAt = tokenData.expiresAt || null;
+                ytAccount.lastPost = 'Ready';
+                ytAccount.connectedAt = new Date().toISOString();
+
+                if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
+                  project.scheduleSettings.targetPlatforms.push('youtube');
+                }
+
+                storage.saveState();
+
+                safeResolve({
+                  success: true,
+                  channel,
+                  expiresAt: tokenData.expiresAt
+                });
+              } catch (exchangeErr) {
+                console.error('[GoogleAuth] Exchange error:', exchangeErr);
+                safeReject(exchangeErr);
+              }
+            },
+            error_callback: async (err) => {
+              console.warn('[GoogleAuth] Popup error callback:', err);
+              // Fallback: try opening server-generated authorization URL directly
+              try {
+                const urlRes = await fetch('/api/youtube/token?action=auth_url');
+                const urlData = await urlRes.json();
+                if (urlData.authUrl) {
+                  window.open(urlData.authUrl, 'GoogleOAuth', 'width=600,height=700');
+                  safeResolve({ success: true, message: 'Google OAuth window opened.' });
+                  return;
+                }
+              } catch (e) {}
+              safeReject(new Error(err?.message || err?.type || 'Google popup closed or blocked.'));
+            }
+          });
+
+          client.requestCode();
+        } catch (err) {
+          console.error('[GoogleAuth] Failed executing code flow:', err);
+          safeReject(err);
         }
       };
 
@@ -156,172 +170,102 @@ export class GoogleAuthService {
         const checkInterval = setInterval(() => {
           if (this.isGoogleLoaded()) {
             clearInterval(checkInterval);
-            executeFlow();
+            executeCodeFlow();
           }
         }, 150);
 
-        setTimeout(() => {
+        setTimeout(async () => {
           clearInterval(checkInterval);
           if (!this.isGoogleLoaded()) {
-            safeReject(new Error('Google Identity Services script did not load. Please check your connection.'));
+            try {
+              const urlRes = await fetch('/api/youtube/token?action=auth_url');
+              const urlData = await urlRes.json();
+              if (urlData.authUrl) {
+                window.open(urlData.authUrl, 'GoogleOAuth', 'width=600,height=700');
+                safeResolve({ success: true, message: 'Google OAuth window opened.' });
+                return;
+              }
+            } catch (e) {}
+            safeReject(new Error('Google Identity Services script did not load. Please check your network connection or popup blocker.'));
           }
-        }, 4000);
+        }, 3000);
         return;
       }
 
-      executeFlow();
+      executeCodeFlow();
     });
   }
 
-  static executeTokenFlow(project, resolve, reject, options = {}) {
-    const successHandler = async (tokenResponse) => {
-      const accessToken = tokenResponse.access_token;
-      try {
-        const channelData = await this.fetchChannelInfo(accessToken);
-
-        let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
-        if (!ytAccount) {
-          ytAccount = {
-            id: 'youtube',
-            name: 'YouTube Shorts',
-            icon: 'youtube',
-            color: '#FF0000',
-            handle: '',
-            connected: false,
-            active: true
-          };
-          project.socialAccounts.push(ytAccount);
-        }
-
-        ytAccount.connected = true;
-        ytAccount.active = true;
-        ytAccount.handle = channelData.customUrl || channelData.title;
-        ytAccount.channelTitle = channelData.title;
-        ytAccount.followers = channelData.subscribersFormatted;
-        ytAccount.avatar = channelData.avatar;
-        ytAccount.accessToken = accessToken;
-        ytAccount.token = accessToken;
-        ytAccount.channelId = channelData.id;
-        ytAccount.lastPost = 'Ready';
-        ytAccount.connectedAt = new Date().toISOString();
-
-        if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
-          project.scheduleSettings.targetPlatforms.push('youtube');
-        }
-
-        this.setYouTubeToken(project, accessToken);
-        storage.saveState();
-        resolve({
-          success: true,
-          channel: channelData,
-          accessToken
-        });
-      } catch (err) {
-        console.error('Error fetching YouTube channel details:', err);
-        this.setYouTubeToken(project, accessToken);
-        storage.saveState();
-        resolve({
-          success: true,
-          message: 'Connected with Google OAuth token.',
-          accessToken
-        });
-      }
-    };
-
-    const errorHandler = (err) => {
-      reject(err);
-    };
-
-    const ready = this.initClient(successHandler, errorHandler);
-    if (!ready || !this.tokenClient) {
-      reject(new Error('Could not initialize Google OAuth client. Check Client ID settings.'));
-      return;
-    }
-
-    try {
-      this.tokenClient.requestAccessToken({ prompt: options?.prompt || 'select_account' });
-    } catch (e) {
-      reject(e);
-    }
-  }
-
   /**
-   * Fetches authentic YouTube Channel details via YouTube Data API v3
+   * Synchronizes stored YouTube credentials status from the server vault
    */
-  static async fetchChannelInfo(accessToken) {
-    const url = 'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true';
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
+  static async syncStoredCredentials(project) {
+    try {
+      const res = await fetch('/api/youtube/token');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.channel) {
+          let ytAccount = project?.socialAccounts?.find(a => a.id === 'youtube');
+          if (!ytAccount && project?.socialAccounts) {
+            ytAccount = {
+              id: 'youtube',
+              name: 'YouTube Shorts',
+              icon: 'youtube',
+              color: '#FF0000',
+              handle: '@chikubd',
+              connected: false,
+              active: true
+            };
+            project.socialAccounts.push(ytAccount);
+          }
+
+          if (ytAccount) {
+            ytAccount.connected = data.connected ?? ytAccount.connected;
+            ytAccount.active = true;
+            ytAccount.tokenConfigured = data.tokenConfigured;
+            ytAccount.hasRefreshToken = data.hasRefreshToken;
+            ytAccount.channelId = data.channel.id || ytAccount.channelId;
+            ytAccount.channelTitle = data.channel.title || ytAccount.channelTitle;
+            ytAccount.handle = data.channel.customUrl || ytAccount.handle;
+            ytAccount.avatar = data.channel.avatar || ytAccount.avatar;
+            ytAccount.expiresAt = data.expiresAt;
+            ytAccount.status = data.status;
+            ytAccount.lastError = data.lastError;
+          }
+          return true;
+        }
       }
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || `YouTube API HTTP ${response.status}`);
+    } catch (e) {
+      console.warn('[GoogleAuth] syncStoredCredentials notice:', e.message);
     }
-
-    const data = await response.json();
-    const items = data.items || [];
-    if (items.length === 0) {
-      return {
-        id: 'no_channel',
-        title: 'Google Account (No YouTube Channel)',
-        customUrl: '@google.user',
-        subscribersFormatted: '0 Subscribers',
-        avatar: ''
-      };
-    }
-
-    const channel = items[0];
-    const snippet = channel.snippet || {};
-    const stats = channel.statistics || {};
-
-    const subCount = Number(stats.subscriberCount || 0);
-    let formattedSubs = `${subCount.toLocaleString()} Subscribers`;
-    if (subCount >= 1000000) {
-      formattedSubs = `${(subCount / 1000000).toFixed(1)}M Subscribers`;
-    } else if (subCount >= 1000) {
-      formattedSubs = `${(subCount / 1000).toFixed(1)}K Subscribers`;
-    }
-
-    return {
-      id: channel.id,
-      title: snippet.title || 'YouTube Creator',
-      customUrl: snippet.customUrl || `@${(snippet.title || '').toLowerCase().replace(/\s+/g, '')}`,
-      avatar: snippet.thumbnails?.default?.url || snippet.thumbnails?.medium?.url || '',
-      subscribersFormatted: formattedSubs,
-      videoCount: stats.videoCount || 0
-    };
+    return false;
   }
 
   /**
-   * Retrieves active YouTube Access Token from state or localStorage
+   * Retrieves active YouTube Access Token (if cached for current session)
    */
   static getYouTubeToken(project) {
     const account = project?.socialAccounts?.find(a => a.id === 'youtube');
-    return account?.accessToken || account?.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '') || '';
+    return account?.accessToken || account?.token || '';
   }
 
   /**
-   * Stores active YouTube Access Token across project, localStorage, and server cache
+   * Stores active YouTube Channel details in local project state
    */
-  static setYouTubeToken(project, token) {
-    if (!token) return;
-    const cleanToken = token.trim();
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('omni_google_access_token', cleanToken);
-      }
-    } catch (e) {}
+  static setYouTubeToken(project, token, refreshToken = null) {
+    if (!token && !refreshToken) return;
+    const cleanToken = (token || '').trim();
+    const cleanRefresh = (refreshToken || (cleanToken.startsWith('1//') ? cleanToken : '')).trim();
 
-    // Persist token to server cache asynchronously
+    // Persist to server credentials vault asynchronously
     try {
       fetch('/api/youtube/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: cleanToken })
+        body: JSON.stringify({
+          token: cleanToken.startsWith('1//') ? null : cleanToken,
+          refreshToken: cleanRefresh || null
+        })
       }).catch(() => {});
     } catch (e) {}
 
@@ -334,7 +278,7 @@ export class GoogleAuthService {
         color: '#FF0000',
         handle: '@chikubd',
         channelTitle: 'chiku bd',
-        channelId: 'UCCOo5jxEtLRgJQukBMnt-QQ',
+        channelId: 'UCCOo5jxEtLRgJQUkBMnt-QQ',
         connected: true,
         active: true
       };
@@ -342,11 +286,11 @@ export class GoogleAuthService {
     }
 
     if (account) {
-      account.accessToken = cleanToken;
-      account.token = cleanToken;
       account.connected = true;
       account.active = true;
-      account.channelId = account.channelId || 'UCCOo5jxEtLRgJQukBMnt-QQ';
+      account.tokenConfigured = true;
+      if (cleanRefresh) account.hasRefreshToken = true;
+      account.channelId = account.channelId || 'UCCOo5jxEtLRgJQUkBMnt-QQ';
       account.channelTitle = account.channelTitle || 'chiku bd';
       account.handle = account.handle || '@chikubd';
     }
@@ -356,28 +300,39 @@ export class GoogleAuthService {
     }
   }
 
-  static async syncStoredCredentials(project) {
-    try {
-      const res = await fetch('/api/youtube/token');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.youtube?.accessToken) {
-          this.setYouTubeToken(project, data.youtube.accessToken);
-          return true;
-        }
-      }
-    } catch (e) {}
-    return false;
-  }
-
   /**
-   * Tests and validates YouTube OAuth access token directly with YouTube Data API v3
+   * Tests and validates YouTube OAuth access token or refresh token directly
    */
   static async testYouTubeToken(token) {
     if (!token || !token.trim()) {
       throw new Error('Google/YouTube Access Token is empty.');
     }
     const cleanToken = token.trim();
+
+    // If it's a Refresh Token (starts with 1//), verify via backend token endpoint
+    if (cleanToken.startsWith('1//')) {
+      const res = await fetch('/api/youtube/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: cleanToken })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || data.error || 'Invalid or revoked Refresh Token');
+      }
+      return {
+        success: true,
+        channel: data.channel || {
+          id: 'UCCOo5jxEtLRgJQUkBMnt-QQ',
+          title: 'chiku bd',
+          customUrl: '@chikubd',
+          subscribers: '0'
+        },
+        hasRefreshToken: true,
+        isPermanent: true
+      };
+    }
+
     const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true', {
       headers: {
         'Authorization': `Bearer ${cleanToken}`,
@@ -392,7 +347,7 @@ export class GoogleAuthService {
         if (errJson.error?.message) errMsg = errJson.error.message;
       } catch (e) {}
       if (res.status === 401) {
-        throw new Error('YOUTUBE_TOKEN_EXPIRED: Access Token মেয়াদোত্তীর্ণ বা অকার্যকর (HTTP 401)। অনুগ্রহ করে নতুন টোকেন দিন।');
+        throw new Error('YOUTUBE_TOKEN_EXPIRED: Access Token expired (HTTP 401). Please connect your YouTube account.');
       }
       throw new Error(errMsg);
     }
@@ -403,7 +358,7 @@ export class GoogleAuthService {
       return {
         success: true,
         channel: {
-          id: 'UCCOo5jxEtLRgJQukBMnt-QQ',
+          id: 'UCCOo5jxEtLRgJQUkBMnt-QQ',
           title: 'chiku bd',
           customUrl: '@chikubd',
           subscribers: '0'
@@ -425,19 +380,16 @@ export class GoogleAuthService {
   }
 
   /**
-   * Uploads short video directly to YouTube Data API v3
+   * Uploads short video directly to YouTube Shorts via Server Relay or Direct API
    */
-  static async uploadShortVideo(fileBlob, { title, description = '', tags = [] }, accessToken) {
-    if (!accessToken) {
-      throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token missing. Please connect YouTube with Google.');
-    }
+  static async uploadShortVideo(fileBlob, { title, description = '', tags = [] }, accessToken = null) {
     if (!fileBlob || !(fileBlob instanceof Blob)) {
       throw new Error('VIDEO_BLOB_REQUIRED: Video binary file is required to upload to YouTube Shorts.');
     }
 
-    // Attempt 1: Server-side relay (bypasses browser CORS and origin limitations)
+    // Server-side relay with automated pre-flight token refresh
     try {
-      const relayUrl = `/api/youtube/upload-video?title=${encodeURIComponent(title || '')}&description=${encodeURIComponent(description || '')}&token=${encodeURIComponent(accessToken)}`;
+      const relayUrl = `/api/youtube/upload-video?title=${encodeURIComponent(title || '')}&description=${encodeURIComponent(description || '')}${accessToken ? `&token=${encodeURIComponent(accessToken)}` : ''}`;
       const relayRes = await fetch(relayUrl, {
         method: 'POST',
         headers: {
@@ -459,85 +411,15 @@ export class GoogleAuthService {
         throw new Error('YOUTUBE_TOKEN_EXPIRED: YouTube Access Token expired. Please reconnect YouTube Channel.');
       }
       if (relayData.error === 'YOUTUBE_TOKEN_REQUIRED') {
-        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token missing.');
+        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token missing. Please connect YouTube Channel.');
       }
-      console.warn('[GoogleAuth] Server relay message:', relayData.message || relayData.error);
+      throw new Error(relayData.message || relayData.error || 'Server video upload relay failed.');
     } catch (relayErr) {
       if (relayErr.message && (relayErr.message.includes('YOUTUBE_TOKEN') || relayErr.message.includes('VIDEO_BLOB'))) {
         throw relayErr;
       }
-      console.warn('[GoogleAuth] Server relay failed, trying direct browser upload:', relayErr.message);
+      console.warn('[GoogleAuth] Server relay upload attempt note:', relayErr.message);
+      throw relayErr;
     }
-
-    // Attempt 2: Direct browser client Resumable Upload
-    const metadata = {
-      snippet: {
-        title: (title || 'YouTube Short').substring(0, 100),
-        description: `${description || ''}\n\n#Shorts #Viral #Trending`,
-        tags: tags && tags.length > 0 ? tags : ['Shorts', 'Viral', 'YouTubeShorts'],
-        categoryId: '22' // People & Blogs
-      },
-      status: {
-        privacyStatus: 'public',
-        selfDeclaredMadeForKids: false
-      }
-    };
-
-    // 1. Resumable Upload Initiation
-    const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8',
-        'X-Upload-Content-Length': fileBlob.size.toString(),
-        'X-Upload-Content-Type': fileBlob.type || 'video/mp4'
-      },
-      body: JSON.stringify(metadata)
-    });
-
-    if (!initRes.ok) {
-      let errMsg = `YouTube upload initiation failed (HTTP ${initRes.status})`;
-      try {
-        const errJson = await initRes.json();
-        if (errJson.error?.message) errMsg = errJson.error.message;
-        if (initRes.status === 401) {
-          throw new Error('YOUTUBE_TOKEN_EXPIRED: YouTube Access Token expired. Please reconnect YouTube Channel.');
-        }
-      } catch (e) {
-        if (e.message && e.message.includes('YOUTUBE_TOKEN')) throw e;
-      }
-      throw new Error(errMsg);
-    }
-
-    const uploadUrl = initRes.headers.get('Location');
-    if (!uploadUrl) {
-      throw new Error('YouTube did not return a valid upload location URI.');
-    }
-
-    // 2. Upload binary payload
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': fileBlob.type || 'video/mp4'
-      },
-      body: fileBlob
-    });
-
-    if (!uploadRes.ok) {
-      let errDetail = `YouTube video upload failed (HTTP ${uploadRes.status})`;
-      try {
-        const errJson = await uploadRes.json();
-        if (errJson.error?.message) errDetail = errJson.error.message;
-      } catch (e) {}
-      throw new Error(errDetail);
-    }
-
-    const videoData = await uploadRes.json();
-    const videoId = videoData.id;
-    return {
-      success: true,
-      videoId,
-      postUrl: `https://www.youtube.com/shorts/${videoId}`
-    };
   }
 }

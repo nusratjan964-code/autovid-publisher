@@ -55,12 +55,16 @@ export class SocialManagerService {
   /**
    * Discover Facebook Pages managed by authenticated user via /me/accounts
    */
-  static async discoverFacebookPages(token = '') {
+  static async discoverFacebookPages(token = '', options = {}) {
     try {
       const res = await fetch('/api/facebook/pages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({
+          token,
+          appId: options.appId,
+          appSecret: options.appSecret
+        })
       });
       return await res.json();
     } catch (err) {
@@ -70,6 +74,34 @@ export class SocialManagerService {
         error: err.message,
         message: `Failed to contact Facebook API server: ${err.message}`
       };
+    }
+  }
+
+  /**
+   * Get configured Meta App ID and Secret status from server
+   */
+  static async getMetaAppConfig() {
+    try {
+      const res = await fetch('/api/facebook/config');
+      return await res.json();
+    } catch (err) {
+      return { success: false, configured: false };
+    }
+  }
+
+  /**
+   * Save Meta App ID and Secret to server .env.local
+   */
+  static async saveMetaAppConfig(appId, appSecret) {
+    try {
+      const res = await fetch('/api/facebook/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId, appSecret })
+      });
+      return await res.json();
+    } catch (err) {
+      return { success: false, error: err.message };
     }
   }
 
@@ -126,16 +158,9 @@ export class SocialManagerService {
   /**
    * Connect Facebook Page with verified details and token preservation
    */
-  static connectFacebookPage(project, { pageId, pageName, handle = '', token = '', tokenConfigured = true }) {
+  static connectFacebookPage(project, { pageId, pageName, handle = '', token = '', tokenConfigured = true, expiresAt = null, isPermanent = false }) {
     let account = project.socialAccounts.find(a => a.id === 'facebook');
     const cleanHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${(pageName || 'chiku.bd').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-    const preservedToken = token || account?.accessToken || account?.token || localStorage.getItem('omni_fb_page_token') || '';
-
-    if (preservedToken) {
-      try {
-        localStorage.setItem('omni_fb_page_token', preservedToken);
-      } catch (e) {}
-    }
 
     if (!account) {
       account = {
@@ -146,9 +171,9 @@ export class SocialManagerService {
         handle: cleanHandle,
         pageId: pageId || null,
         pageName: pageName || 'Chiku bd',
-        accessToken: preservedToken,
-        token: preservedToken,
-        tokenConfigured: tokenConfigured || !!preservedToken,
+        tokenConfigured: tokenConfigured || true,
+        expiresAt: expiresAt || null,
+        isPermanent: isPermanent || false,
         connected: true,
         active: true,
         verified: true,
@@ -164,11 +189,9 @@ export class SocialManagerService {
       account.pageId = pageId || account.pageId || null;
       account.pageName = pageName || account.pageName || 'Chiku bd';
       account.handle = cleanHandle;
-      if (preservedToken) {
-        account.accessToken = preservedToken;
-        account.token = preservedToken;
-      }
-      account.tokenConfigured = tokenConfigured || !!account.accessToken;
+      account.tokenConfigured = tokenConfigured || true;
+      if (expiresAt !== undefined) account.expiresAt = expiresAt;
+      if (isPermanent !== undefined) account.isPermanent = isPermanent;
       account.followers = 'Page Connected';
       account.connectedAt = new Date().toISOString();
     }
@@ -287,24 +310,12 @@ export class SocialManagerService {
    */
   static getFacebookToken(project) {
     const account = project?.socialAccounts?.find(a => a.id === 'facebook');
-    return account?.accessToken || account?.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_fb_page_token') : '') || '';
+    return account?.accessToken || account?.token || '';
   }
 
-  /**
-   * Update active Facebook Page token across state and localStorage
-   */
   static setFacebookToken(project, token) {
-    if (!token) return;
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('omni_fb_page_token', token.trim());
-      }
-    } catch (e) {}
-
     const account = project?.socialAccounts?.find(a => a.id === 'facebook');
     if (account) {
-      account.accessToken = token.trim();
-      account.token = token.trim();
       account.tokenConfigured = true;
     }
   }

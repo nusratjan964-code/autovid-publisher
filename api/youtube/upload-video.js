@@ -1,62 +1,5 @@
 // Server-side YouTube Shorts Resumable Upload Relay
-import fs from 'fs';
-import path from 'path';
-
-const CREDENTIALS_FILE = path.join(process.cwd(), '.credentials_cache.json');
-
-function loadCache() {
-  try {
-    if (fs.existsSync(CREDENTIALS_FILE)) {
-      return JSON.parse(fs.readFileSync(CREDENTIALS_FILE, 'utf8'));
-    }
-  } catch (e) {}
-  return {};
-}
-
-function saveCache(data) {
-  try {
-    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (e) {}
-}
-
-async function resolveEffectiveYouTubeToken(providedToken) {
-  if (providedToken) return providedToken;
-
-  const cache = loadCache();
-  let token = cache.youtube?.accessToken || '';
-  const refreshToken = cache.youtube?.refreshToken || '';
-
-  if (refreshToken) {
-    try {
-      const clientId = process.env.VITE_GOOGLE_CLIENT_ID || cache.googleClientId || '';
-      const clientSecret = process.env.VITE_GOOGLE_CLIENT_SECRET || cache.googleClientSecret || '';
-
-      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token'
-        }).toString()
-      });
-
-      const refreshData = await refreshRes.json();
-      if (refreshRes.ok && refreshData.access_token) {
-        token = refreshData.access_token;
-        cache.youtube.accessToken = token;
-        cache.youtube.updatedAt = new Date().toISOString();
-        saveCache(cache);
-        console.log('[YouTube Upload] Refreshed YouTube Access Token via Refresh Token');
-      }
-    } catch (e) {
-      console.warn('[YouTube Upload] Refresh token attempt note:', e.message);
-    }
-  }
-
-  return token;
-}
+import { getValidYouTubeAccessToken } from '../../lib/youtubeTokenManager.js';
 
 export const config = {
   api: {
@@ -73,7 +16,22 @@ export default async function handler(req, res) {
 
   const query = req.query || {};
   const directToken = (query.token || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '').trim();
-  const token = await resolveEffectiveYouTubeToken(directToken);
+
+  let token = directToken;
+  if (!token) {
+    try {
+      token = await getValidYouTubeAccessToken();
+    } catch (tokenErr) {
+      console.warn('[YouTube Upload] Automated pre-flight token resolution note:', tokenErr.message);
+      return res.status(401).json({
+        success: false,
+        error: 'YOUTUBE_TOKEN_REQUIRED',
+        reconnectRequired: tokenErr.message.includes('RECONNECT_REQUIRED'),
+        message: tokenErr.message
+      });
+    }
+  }
+
   const title = (query.title || 'YouTube Short').trim();
   const description = (query.description || '').trim();
 

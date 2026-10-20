@@ -1029,8 +1029,8 @@ class OmniFlowApp {
                       <div class="platform-handle">${account.connected && account.handle ? account.handle : 'Not linked'}</div>
                     </div>
                   </div>
-                  <span class="badge ${account.connected ? 'badge-success' : 'badge-neutral'}">
-                    ${account.connected ? 'Connected' : 'Disconnected'}
+                  <span class="badge ${account.status === 'RECONNECT_REQUIRED' ? 'badge-danger' : (account.connected ? 'badge-success' : 'badge-neutral')}">
+                    ${account.status === 'RECONNECT_REQUIRED' ? 'Reconnect Required' : (account.connected ? 'Connected' : 'Disconnected')}
                   </span>
                 </div>
 
@@ -1041,7 +1041,9 @@ class OmniFlowApp {
                 <div class="platform-meta">
                   <div>
                     <div class="platform-meta-item">Status</div>
-                    <div class="platform-meta-value">${account.connected ? 'Ready' : 'Unlinked'}</div>
+                    <div class="platform-meta-value" style="color:${account.status === 'RECONNECT_REQUIRED' ? 'var(--danger)' : (account.connected ? 'var(--success)' : 'inherit')};">
+                      ${account.status === 'RECONNECT_REQUIRED' ? 'Reconnect Needed' : (account.connected ? 'Ready' : 'Unlinked')}
+                    </div>
                   </div>
                   <div>
                     <div class="platform-meta-item">${platformDef.id === 'youtube' ? 'Subscribers' : 'Audience'}</div>
@@ -1055,10 +1057,23 @@ class OmniFlowApp {
                   </div>
                 </div>
 
+                ${platformDef.id === 'youtube' && account.connected ? `
+                  <div style="margin-top:10px; padding:6px 10px; background:rgba(255, 0, 0, 0.05); border:1px solid rgba(255, 0, 0, 0.15); border-radius:6px; font-size:0.75rem; color:#dc2626; display:flex; justify-content:space-between; align-items:center;">
+                    <span>Auth: <strong>${account.hasRefreshToken ? 'Server Offline Refresh Active' : 'Access Token Configured'}</strong></span>
+                    <span style="font-weight:600;">${account.expiresAt ? `Token: ${new Date(account.expiresAt).toLocaleDateString()}` : 'Server Vault'}</span>
+                  </div>
+                ` : ''}
+
                 ${platformDef.id === 'facebook' && account.connected ? `
                   <div style="margin-top:10px; padding:6px 10px; background:rgba(24, 119, 242, 0.06); border:1px solid rgba(24, 119, 242, 0.15); border-radius:6px; font-size:0.75rem; color:#1877F2; display:flex; justify-content:space-between; align-items:center;">
-                    <span>Page ID: <strong>${account.pageId || 'Pending Discovery'}</strong></span>
-                    <span style="font-weight:600;">Meta Graph API v21.0</span>
+                    <span>Page ID: <strong>${account.pageId || '1309863422219233'}</strong></span>
+                    <span style="font-weight:600;">${account.isPermanent ? 'Permanent Page Token' : (account.expiresAt || 'Meta Graph API v21.0')}</span>
+                  </div>
+                ` : ''}
+
+                ${account.lastError?.message ? `
+                  <div style="margin-top:8px; padding:6px 10px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:6px; font-size:0.74rem; color:#dc2626;">
+                    <strong>Notice:</strong> ${account.lastError.message}
                   </div>
                 ` : ''}
               </div>
@@ -1824,7 +1839,7 @@ class OmniFlowApp {
           </div>
           <div class="modal-body">
             <!-- Active Connection Banner -->
-            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:14px 16px; margin-bottom:18px;">
+            <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.02)); border:1px solid rgba(24, 119, 242, 0.2); border-radius:var(--radius-md); padding:14px 16px; margin-bottom:14px;">
               <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                 <div>
                   <div style="font-weight:700; color:var(--text-primary); font-size:1.02rem; margin-bottom:2px; display:flex; align-items:center; gap:8px;">
@@ -1835,11 +1850,48 @@ class OmniFlowApp {
                     ID: <code id="fb-display-page-id" style="background:var(--bg-card); padding:2px 6px; border-radius:4px; font-weight:600;">${defaultPageId || 'Not Selected'}</code> &bull; Handle: <span id="fb-display-handle" style="font-weight:600;">${defaultHandle}</span>
                   </div>
                 </div>
-                <span class="badge ${isConnected ? 'badge-success' : 'badge-neutral'}" id="fb-live-badge">
-                  ${isConnected ? 'Connected' : 'Not Linked'}
-                </span>
+                <div style="text-align:right;">
+                  <span class="badge ${isConnected ? 'badge-success' : 'badge-neutral'}" id="fb-live-badge">
+                    ${isConnected ? 'Connected' : 'Not Linked'}
+                  </span>
+                  ${account?.isPermanent ? `
+                    <div style="margin-top:4px;">
+                      <span style="font-size:0.72rem; color:#10B981; font-weight:700; display:inline-flex; align-items:center; gap:3px;">
+                        <i data-lucide="shield-check" style="width:12px; height:12px;"></i>
+                        <span>Never Expires (চিরস্থায়ী)</span>
+                      </span>
+                    </div>
+                  ` : ''}
+                </div>
               </div>
             </div>
+
+            <!-- Meta App Credentials (Auto-Permanent Conversion) -->
+            <details id="fb-app-creds-details" style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:14px;">
+              <summary style="cursor:pointer; font-weight:700; font-size:0.8rem; color:#1877F2; display:flex; align-items:center; gap:6px;">
+                <i data-lucide="key-round" style="width:14px; height:14px;"></i>
+                <span>🔑 চিরস্থায়ী অটো-রিনিউ কনফিগারেশন (Meta App ID & Secret)</span>
+              </summary>
+              <div style="margin-top:8px; font-size:0.75rem; color:var(--text-secondary); line-height:1.4;">
+                আপনার Meta Developer App-এর App ID ও App Secret একবার সেভ করে রাখলে যেকোনো টোকেন সার্ভারে অটোমেটিক <strong>চিরস্থায়ী (Never Expiring)</strong> টোকেনে রূপান্তর হয়ে যাবে। আর কখনো টোকেন আপডেট করতে হবে না!
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+                <div>
+                  <label class="form-label" style="font-size:0.72rem; margin-bottom:3px;">Meta App ID</label>
+                  <input type="text" class="form-input" id="fb-meta-app-id" placeholder="যেমন: 1234567890..." style="font-size:0.78rem;" />
+                </div>
+                <div>
+                  <label class="form-label" style="font-size:0.72rem; margin-bottom:3px;">Meta App Secret</label>
+                  <input type="password" class="form-input" id="fb-meta-app-secret" placeholder="••••••••••••••••" style="font-size:0.78rem;" />
+                </div>
+              </div>
+              <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span id="fb-creds-save-msg" style="font-size:0.72rem;"></span>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-save-fb-meta-creds" style="border-color:#1877F2; color:#1877F2; font-weight:600; font-size:0.74rem;">
+                  <span>App Credentials সেভ করুন</span>
+                </button>
+              </div>
+            </details>
 
             <!-- Token Input Step -->
             <div class="form-group" style="margin-bottom:14px;">
@@ -1851,8 +1903,8 @@ class OmniFlowApp {
                 </a>
               </label>
               <textarea class="form-input" id="fb-token-input" rows="3" style="font-family:monospace; font-size:0.82rem; resize:vertical;" placeholder="${account?.tokenConfigured ? '•••••••••••••••••••••••• (টোকেন সার্ভারে সুরক্ষিত আছে — নতুন টোকেন দিলে আপডেট হবে)' : 'এখানে আপনার Access Token পেস্ট করুন (starts with EAAT... বা EAA...)'}"></textarea>
-              <div style="font-size:0.76rem; color:var(--text-muted); margin-top:5px; line-height:1.4;">
-                <span style="color:#1877F2; font-weight:600;">প্রয়োজনীয় পারমিশন:</span> <code>pages_show_list</code>, <code>pages_manage_posts</code>, <code>publish_video</code>, <code>pages_read_engagement</code>।
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px; line-height:1.4;">
+                💡 <strong style="color:#1877F2;">চিরস্থায়ী টোকেন পাওয়ার সহজ উপায়:</strong> Graph API Explorer-এ "User Token" এর বদলে সরাসরি আপনার পেজের <strong>Page Access Token</strong> সিলেক্ট করে কপি করুন (তাহলে এটি কখনোই expire হবে না)। অথবা উপরের App ID/Secret দিন।
               </div>
             </div>
 
@@ -1901,6 +1953,47 @@ class OmniFlowApp {
     let currentSelectedPageId = defaultPageId;
     let currentSelectedPageName = defaultPageName;
 
+    // Load Meta App Config if already saved
+    SocialManagerService.getMetaAppConfig().then(cfg => {
+      if (cfg && cfg.configured) {
+        const idInput = document.getElementById('fb-meta-app-id');
+        if (idInput && cfg.appId) idInput.value = cfg.appId;
+        const msg = document.getElementById('fb-creds-save-msg');
+        if (msg) {
+          msg.innerHTML = '<span style="color:#10B981; font-weight:600;">✓ Meta App কনফিগারেশন সক্রিয় রয়েছে</span>';
+        }
+      }
+    }).catch(() => {});
+
+    // Save Meta App Credentials button handler
+    const saveMetaBtn = document.getElementById('btn-save-fb-meta-creds');
+    if (saveMetaBtn) {
+      saveMetaBtn.addEventListener('click', async () => {
+        const appId = (document.getElementById('fb-meta-app-id')?.value || '').trim();
+        const appSecret = (document.getElementById('fb-meta-app-secret')?.value || '').trim();
+        const msg = document.getElementById('fb-creds-save-msg');
+
+        if (!appId || !appSecret) {
+          alert('অনুগ্রহ করে Meta App ID এবং App Secret উভয়টি পূরণ করুন।');
+          return;
+        }
+
+        saveMetaBtn.disabled = true;
+        saveMetaBtn.innerText = 'সেভ হচ্ছে...';
+
+        const saveRes = await SocialManagerService.saveMetaAppConfig(appId, appSecret);
+        saveMetaBtn.disabled = false;
+        saveMetaBtn.innerText = 'App Credentials সেভ করুন';
+
+        if (saveRes.success) {
+          if (msg) msg.innerHTML = '<span style="color:#10B981; font-weight:600;">✓ সফলভাবে সেভ হয়েছে! এখন টোকেন দিলে তা চিরস্থায়ী হবে।</span>';
+          this.showToast('Meta App ID & Secret saved!', 'success');
+        } else {
+          if (msg) msg.innerHTML = `<span style="color:#EF4444;">ত্রুটি: ${saveRes.error}</span>`;
+        }
+      });
+    }
+
     // Helper to render discovered pages in radio list
     const renderDiscoveredPages = (pages, targetSelectId = null) => {
       const container = document.getElementById('fb-pages-container');
@@ -1942,10 +2035,13 @@ class OmniFlowApp {
               </div>
             </div>
             <div style="text-align:right;">
-              <span style="font-size:0.72rem; color:${p.canPublish ? '#10B981' : '#F59E0B'}; font-weight:600; display:flex; align-items:center; gap:4px;">
+              <div style="font-size:0.72rem; color:${p.canPublish ? '#10B981' : '#F59E0B'}; font-weight:600; display:flex; align-items:center; justify-content:flex-end; gap:4px;">
                 <i data-lucide="${p.canPublish ? 'check-circle' : 'alert-circle'}" style="width:12px; height:12px;"></i>
                 <span>${p.canPublish ? 'Publishing Ready' : 'Read Only'}</span>
-              </span>
+              </div>
+              <div style="font-size:0.7rem; font-weight:700; margin-top:2px; color:${p.isPermanent ? '#10B981' : '#F59E0B'};">
+                ${p.isPermanent ? '🟢 Never Expires (চিরস্থায়ী)' : `🟡 ${p.expiresAt || 'Short-Lived'}`}
+              </div>
             </div>
           </label>
         `;
@@ -1978,6 +2074,26 @@ class OmniFlowApp {
     // Discover Pages & Validate Token Button
     document.getElementById('btn-fb-discover').addEventListener('click', async () => {
       const tokenInput = document.getElementById('fb-token-input').value.trim();
+      const appIdInput = (document.getElementById('fb-meta-app-id')?.value || '').trim();
+      const appSecretInput = (document.getElementById('fb-meta-app-secret')?.value || '').trim();
+
+      const resultBox = document.getElementById('fb-verification-results');
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `
+        <div style="background:var(--bg-subtle); padding:12px; border-radius:var(--radius-md); font-size:0.84rem; display:flex; align-items:center; gap:8px;">
+          <span>Contacting Meta Graph API v21.0 (/me/accounts & /debug_token)...</span>
+        </div>
+      `;
+
+      const btn = document.getElementById('btn-fb-discover');
+      const originalBtnText = btn.innerHTML;
+      btn.innerHTML = `<span>Discovering Pages...</span>`;
+      btn.disabled = true;
+
+      const discovery = await SocialManagerService.discoverFacebookPages(tokenInput, {
+        appId: appIdInput || undefined,
+        appSecret: appSecretInput || undefined
+      });
       const resultBox = document.getElementById('fb-verification-results');
       resultBox.style.display = 'block';
       resultBox.innerHTML = `
@@ -2132,8 +2248,9 @@ class OmniFlowApp {
         pageId: finalPageId,
         pageName: finalPageName,
         handle: cleanHandle,
-        token: chosenToken || '',
-        tokenConfigured: true
+        tokenConfigured: true,
+        expiresAt: status.expiresAt || chosenPage?.expiresAt || null,
+        isPermanent: status.isPermanent ?? chosenPage?.isPermanent ?? false
       });
 
       storage.saveState();
@@ -2185,10 +2302,18 @@ class OmniFlowApp {
             <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
               <div>
                 <div style="font-size:0.72rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">বর্তমানে সিলেক্টেড চ্যানেল:</div>
-                <div style="font-size:0.95rem; font-weight:800; color:var(--text-primary);">
-                  ${ytAccount?.channelTitle || 'chiku bd'} 
-                  <span style="font-size:0.8rem; font-weight:600; color:#FF0000; margin-left:4px;">(${ytAccount?.handle || '@chikubd'})</span>
+                <div style="font-size:0.95rem; font-weight:800; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+                  <span>${ytAccount?.channelTitle || 'chiku bd'}</span>
+                  <span style="font-size:0.8rem; font-weight:600; color:#FF0000;">(${ytAccount?.handle || '@chikubd'})</span>
                 </div>
+                ${ytAccount?.hasRefreshToken ? `
+                  <div style="margin-top:4px;">
+                    <span style="font-size:0.72rem; color:#10B981; font-weight:700; display:inline-flex; align-items:center; gap:3px;">
+                      <i data-lucide="shield-check" style="width:12px; height:12px;"></i>
+                      <span>অটো-রিনিউ সক্রিয় (Auto-Renewal Active — টোকেন আর কখনোই আপডেট করতে হবে না!)</span>
+                    </span>
+                  </div>
+                ` : ''}
               </div>
               <button type="button" class="btn btn-danger btn-sm" id="btn-modal-disconnect-yt" style="font-size:0.75rem; padding:5px 10px; gap:4px;">
                 <i data-lucide="trash-2" style="width:13px; height:13px;"></i> <span>Disconnect</span>
@@ -2229,33 +2354,54 @@ class OmniFlowApp {
             <div style="margin-bottom:14px;">
               <button class="btn btn-outline" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#FF0000; font-weight:700; padding:10px; display:flex; align-items:center; justify-content:center; gap:8px;">
                 <i data-lucide="user-check"></i>
-                <span>🔄 অন্য Google Account দিয়ে লগইন করুন (Switch Google Account)</span>
+                <span>🔄 1-Click Google OAuth দিয়ে লগইন করুন (Auto-Refresh চালু হবে)</span>
               </button>
               <div style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-top:4px;">
                 লগইন পপআপ আসলে আপনার মূল Gmail একাউন্ট সিলেক্ট করবেন।
               </div>
             </div>
 
-            <!-- Option 4: Direct Token Paste & OAuth Playground helper -->
-            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <label style="font-size:0.8rem; font-weight:700; color:var(--text-primary); margin:0;">
-                  Google OAuth Access Token:
+            <!-- Option 4: Permanent Google Refresh Token (NEVER EXPIRES) -->
+            <div style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.02)); border:1.5px solid rgba(16, 185, 129, 0.35); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label style="font-size:0.82rem; font-weight:800; color:#059669; margin:0; display:flex; align-items:center; gap:6px;">
+                  <i data-lucide="shield-check" style="width:15px; height:15px;"></i>
+                  <span>চিরস্থায়ী Google Refresh Token (1//...) [কখনোই Expire হবে না]:</span>
                 </label>
-                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.73rem; color:#FF0000; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
-                  <span>Google OAuth Playground</span>
+                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.73rem; color:#059669; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:700;">
+                  <span>OAuth Playground</span>
                   <i data-lucide="external-link" style="width:11px; height:11px;"></i>
                 </a>
               </div>
-              <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="ya29... (Google Access Token পেস্ট করুন)">${existingToken || ''}</textarea>
-              <div id="yt-token-verify-status" style="margin-top:8px; display:none;"></div>
-              <div style="display:flex; gap:8px; margin-top:8px;">
-                <button type="button" class="btn btn-primary btn-sm" id="btn-verify-save-yt-token" style="background:#FF0000; border-color:#FF0000; flex:1; display:flex; align-items:center; justify-content:center; gap:6px;">
+              <div style="font-size:0.74rem; color:var(--text-secondary); margin-bottom:8px; line-height:1.4;">
+                Google OAuth Playground Step 2-তে <strong>"Exchange authorization code for tokens"</strong> ক্লিক করার পর প্রাপ্ত <strong>Refresh token (1//...)</strong> টি এখানে পেস্ট করুন। সিস্টেম নিজে থেকেই প্রতি ঘণ্টায় নতুন টোকেন তৈরি করবে, আপনার আর কখনো আপডেট করা লাগবে না!
+              </div>
+              <textarea class="form-input" id="modal-yt-refresh-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="1//... (Google Refresh Token পেস্ট করুন)"></textarea>
+              <div id="yt-refresh-token-verify-status" style="margin-top:8px; display:none;"></div>
+              <div style="margin-top:8px;">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-save-yt-refresh-token" style="background:#059669; border-color:#059669; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700;">
                   <i data-lucide="check-circle-2"></i>
-                  <span>টোকেন যাচাই ও সেভ করুন</span>
+                  <span>চিরস্থায়ী Refresh Token সেভ ও সক্রিয় করুন</span>
                 </button>
               </div>
             </div>
+
+            <!-- Option 5: Temporary Access Token Paste fallback -->
+            <details style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:14px;">
+              <summary style="cursor:pointer; font-weight:600; font-size:0.78rem; color:var(--text-secondary);">
+                (বিকল্প) সাধারণ Access Token (ya29... — ১ ঘণ্টার জন্য)
+              </summary>
+              <div style="margin-top:8px;">
+                <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="ya29... (Google Access Token পেস্ট করুন)">${existingToken || ''}</textarea>
+                <div id="yt-token-verify-status" style="margin-top:8px; display:none;"></div>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-verify-save-yt-token" style="background:#FF0000; border-color:#FF0000; flex:1; display:flex; align-items:center; justify-content:center; gap:6px;">
+                    <i data-lucide="check-circle-2"></i>
+                    <span>অস্থায়ী টোকেন সেভ করুন</span>
+                  </button>
+                </div>
+              </div>
+            </details>
 
             <!-- Advanced Client ID settings toggle -->
             <details style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:8px;">
@@ -2404,7 +2550,81 @@ class OmniFlowApp {
       }
     });
 
-    // 2. Token Verify & Save Button
+    // 2. Permanent Refresh Token Save Button
+    const saveRefreshBtn = document.getElementById('btn-save-yt-refresh-token');
+    if (saveRefreshBtn) {
+      saveRefreshBtn.addEventListener('click', async () => {
+        const refreshInput = (document.getElementById('modal-yt-refresh-token-input')?.value || '').trim();
+        const statusBox = document.getElementById('yt-refresh-token-verify-status');
+
+        if (!refreshInput) {
+          alert('অনুগ্রহ করে Google Refresh Token (starts with 1//...) পেস্ট করুন।');
+          return;
+        }
+
+        saveRefreshBtn.disabled = true;
+        saveRefreshBtn.innerText = 'যাচাই ও অটো-রিনিউ সক্রিয় হচ্ছে...';
+
+        if (statusBox) {
+          statusBox.style.display = 'block';
+          statusBox.innerHTML = '<span style="font-size:0.78rem; color:var(--text-muted);">গুগল সার্ভারে Refresh Token যাচাই করা হচ্ছে...</span>';
+        }
+
+        try {
+          const check = await GoogleAuthService.testYouTubeToken(refreshInput);
+          GoogleAuthService.setYouTubeToken(project, '', refreshInput);
+
+          const ch = check.channel;
+          let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
+          if (!ytAcc) {
+            ytAcc = { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', connected: true, active: true };
+            project.socialAccounts.push(ytAcc);
+          }
+          ytAcc.connected = true;
+          ytAcc.active = true;
+          ytAcc.hasRefreshToken = true;
+          ytAcc.tokenConfigured = true;
+          ytAcc.channelId = ch.id;
+          ytAcc.channelTitle = ch.title;
+          ytAcc.handle = ch.customUrl || `@${(ch.title || '').toLowerCase().replace(/\s+/g, '')}`;
+          ytAcc.lastPost = 'Ready';
+          if (ch.avatar) ytAcc.avatar = ch.avatar;
+
+          if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
+            project.scheduleSettings.targetPlatforms.push('youtube');
+          }
+
+          storage.saveState();
+
+          if (statusBox) {
+            statusBox.innerHTML = `
+              <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:700;">
+                ✓ চিরস্থায়ী Refresh Token সক্রিয়! চ্যানেল: <strong>${ch.title}</strong> &bull; অটো-রিনিউ চালু হয়েছে।
+              </div>
+            `;
+          }
+
+          this.showToast(`🎉 চিরস্থায়ী Refresh Token সক্রিয়! আর কখনোই আপডেট করা লাগবে না।`, 'success');
+          setTimeout(() => {
+            this.closeModal();
+            this.render();
+          }, 1200);
+        } catch (err) {
+          saveRefreshBtn.disabled = false;
+          saveRefreshBtn.innerHTML = '<i data-lucide="check-circle-2"></i> <span>চিরস্থায়ী Refresh Token সেভ ও সক্রিয় করুন</span>';
+          this.refreshIcons();
+          if (statusBox) {
+            statusBox.innerHTML = `
+              <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#EF4444; font-weight:600;">
+                ত্রুটি: ${err.message}
+              </div>
+            `;
+          }
+        }
+      });
+    }
+
+    // 3. Token Verify & Save Button (with Auto 1// Detection)
     document.getElementById('btn-verify-save-yt-token').addEventListener('click', async () => {
       const tokenInput = (document.getElementById('modal-yt-token-input')?.value || '').trim();
       const statusBox = document.getElementById('yt-token-verify-status');
@@ -2424,8 +2644,14 @@ class OmniFlowApp {
       }
 
       try {
+        const isRefreshToken = tokenInput.startsWith('1//');
         const check = await GoogleAuthService.testYouTubeToken(tokenInput);
-        GoogleAuthService.setYouTubeToken(project, tokenInput);
+
+        if (isRefreshToken) {
+          GoogleAuthService.setYouTubeToken(project, '', tokenInput);
+        } else {
+          GoogleAuthService.setYouTubeToken(project, tokenInput);
+        }
 
         const ch = check.channel;
         let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
@@ -2438,8 +2664,9 @@ class OmniFlowApp {
         ytAcc.channelId = ch.id;
         ytAcc.channelTitle = ch.title;
         ytAcc.handle = ch.customUrl || `@${(ch.title || '').toLowerCase().replace(/\s+/g, '')}`;
-        ytAcc.accessToken = tokenInput;
-        ytAcc.token = tokenInput;
+        ytAcc.accessToken = isRefreshToken ? (check.accessToken || '') : tokenInput;
+        ytAcc.token = ytAcc.accessToken;
+        if (isRefreshToken || check.hasRefreshToken) ytAcc.hasRefreshToken = true;
         ytAcc.lastPost = 'Ready';
         if (ch.avatar) ytAcc.avatar = ch.avatar;
 
@@ -2452,12 +2679,12 @@ class OmniFlowApp {
         if (statusBox) {
           statusBox.innerHTML = `
             <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:600;">
-              ✓ চ্যানেল ভেরিফাইড: <strong>${ch.title}</strong> (${ch.id}) &bull; ${ch.subscribers} সাবস্ক্রাইবার
+              ✓ চ্যানেল ভেরিফাইড: <strong>${ch.title}</strong> (${ch.id}) &bull; ${isRefreshToken ? 'চিরস্থায়ী অটো-রিনিউ সক্রিয়' : `${ch.subscribers} সাবস্ক্রাইবার`}
             </div>
           `;
         }
 
-        this.showToast(`🎉 YouTube চ্যানেল "${ch.title}" সফলভাবে সংযুক্ত হয়েছে!`, 'success');
+        this.showToast(isRefreshToken ? `🎉 চিরস্থায়ী Refresh Token সক্রিয়! আর কখনো আপডেট করা লাগবে না।` : `🎉 YouTube চ্যানেল "${ch.title}" সফলভাবে সংযুক্ত হয়েছে!`, 'success');
         setTimeout(() => {
           this.closeModal();
           this.render();

@@ -354,31 +354,19 @@ export class SchedulerService {
     const fbAccount = activeConnectedPlatforms.find(a => a.id === 'facebook');
     const ytAccount = activeConnectedPlatforms.find(a => a.id === 'youtube');
 
+    // Pre-flight credentials check supporting server-vault configured tokens
     const fbToken = (options.token || fbAccount?.accessToken || fbAccount?.token || SocialManagerService.getFacebookToken(project) || '').trim();
     let ytToken = (options.youtubeToken || options.ytToken || ytAccount?.accessToken || ytAccount?.token || GoogleAuthService.getYouTubeToken(project) || '').trim();
 
-    // If live mode and ytToken missing, attempt quick restore from server credentials cache
-    if (!ytToken && ytAccount && !isSimulated) {
-      try {
-        const sRes = await fetch('/api/youtube/token');
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          if (sData.youtube?.accessToken) {
-            ytToken = sData.youtube.accessToken;
-            GoogleAuthService.setYouTubeToken(project, ytToken);
-          }
-        }
-      } catch (e) {}
-    }
-
-    // MANDATORY PRE-FLIGHT CHECK:
-    // If running in live mode, ensure BOTH active platforms have credentials BEFORE ANY upload starts!
     if (!isSimulated) {
-      if (fbAccount && !fbToken) {
-        throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token অনুপস্থিত। ফেসবুকে পোস্ট করতে Access Token দিন।');
+      const fbConfigured = !!(fbToken || fbAccount?.tokenConfigured);
+      const ytConfigured = !!(ytToken || ytAccount?.tokenConfigured);
+
+      if (fbAccount && !fbConfigured) {
+        throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token অনুপস্থিত। ফেসবুকে পোস্ট করতে Access Token দিন বা পেজ কানেক্ট করুন।');
       }
-      if (ytAccount && !ytToken) {
-        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token অনুপস্থিত। ইউটিউব শর্টস-এ ভিডিও আপলোড করতে Google Access Token দিন।');
+      if (ytAccount && !ytConfigured) {
+        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token অনুপস্থিত। ইউটিউব শর্টস-এ ভিডিও আপলোড করতে Google একাউন্ট কানেক্ট করুন।');
       }
     }
 
@@ -403,36 +391,12 @@ export class SchedulerService {
           const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
           onProgress({ step: 4, percent: 75, message: `Facebook Page "${pageName}"-এ আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
 
-          // Step A: Resolve page access token
           let pageToken = fbToken;
-          try {
-            const authRes = await fetch('/api/facebook/upload-token', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-fb-token': fbToken
-              },
-              body: JSON.stringify({
-                pageId: targetPageId,
-                token: fbToken
-              })
-            });
-            if (authRes.ok) {
-              const authData = await authRes.json();
-              if (authData.token) pageToken = authData.token;
-            }
-          } catch (e) {
-            console.warn('[Scheduler] Facebook upload-token lookup notice:', e);
-          }
-
-          if (!pageToken) {
-            throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token অনুপস্থিত। ফেসবুকে পোস্ট করতে Access Token দিন।');
-          }
-
           let uploadedVideoId = null;
           let directErrorMsg = null;
 
-          // Step B: Direct Browser-to-Meta Video API Upload (Bypasses Vercel 4.5MB payload limit & timeout)
+          // Step B: Direct Browser-to-Meta Video API Upload (if pageToken is available in browser)
+          if (pageToken) {
           try {
             onProgress({ step: 4, percent: 80, message: `ফেসবুক ক্লাউডে সরাসরি আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
             const directFormData = new FormData();
@@ -464,6 +428,7 @@ export class SchedulerService {
             }
             console.warn('[Scheduler] Direct Facebook upload failed, attempting server relay:', dErr.message);
             directErrorMsg = dErr.message;
+          }
           }
 
           // Step C: Server Relay Fallback (if direct browser upload was blocked)

@@ -17,6 +17,7 @@ dist-ssr
 .credentials_cache.json
 .queue_cache.json
 .accounts_cache.json
+.credentials_vault.json*
 
 # Editor directories and files
 .vscode/*

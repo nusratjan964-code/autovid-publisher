@@ -29,11 +29,11 @@ class StorageService {
       if (data) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed?.projects)) {
-          const cachedFbToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_fb_page_token') : '') || MASTER_FB_TOKEN;
-          const cachedYtToken = (typeof localStorage !== 'undefined' ? localStorage.getItem('omni_google_access_token') : '') || '';
-
-          if (cachedFbToken && typeof localStorage !== 'undefined') {
-            try { localStorage.setItem('omni_fb_page_token', cachedFbToken); } catch (e) {}
+          if (typeof localStorage !== 'undefined') {
+            try {
+              localStorage.removeItem('omni_fb_page_token');
+              localStorage.removeItem('omni_google_access_token');
+            } catch (e) {}
           }
 
           // Ensure Chiku bd project is present if user is md nahid or if projects have 0 videos

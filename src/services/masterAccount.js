@@ -1,5 +1,5 @@
 // Master Default Account & Project Data for Nahid / Chiku bd
-export const MASTER_FB_TOKEN = 'EAA1kMK7tIyABSysZC7ZAzZBcDS5PUlLjjoPiXIW50N3QDDlQLhKMxFAB36DTyqrqPy4hSv2fynnIwCsF0isJhmeFbUHU5mCKOb7GZA5s8MwcoSFmySBjLB0IZBpZAfNZC1SphniYZBtppXFlZBO4yCUspSz2KymSl5DHfGfenXCeR3ZCjNJIGzmGOt5DZCpOJWBjzGlaJ6e0zhMkX7CLsI3qhuvudPwZBb1MwhtcrZBZBXPS7voodPksdPSd3ynTQ4';
+export const MASTER_FB_TOKEN = '';
 
 export const MASTER_VIDEOS = [
   {
@@ -181,8 +181,6 @@ export function getMasterChikuBdProject() {
         connected: true,
         active: true,
         tokenConfigured: true,
-        token: MASTER_FB_TOKEN,
-        accessToken: MASTER_FB_TOKEN,
         followers: '12.4K',
         lastPost: 'Today'
       },
