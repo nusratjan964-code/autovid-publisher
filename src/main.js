@@ -2326,6 +2326,28 @@ class OmniFlowApp {
                 Google OAuth Playground-এর Step 2-তে <strong>"Exchange authorization code for tokens"</strong> বাটনে ক্লিক করলে যে <strong>Refresh token (যা <code style="font-weight:700; color:#065f46;">1//...</code> দিয়ে শুরু হয়)</strong> পাওয়া যায়, সেটি এখানে পেস্ট করুন। সার্ভার প্রতি ঘণ্টায় নিজে থেকে টোকেন তৈরি করবে, আপনার আর কখনো হাত দেওয়া লাগবে না!
               </div>
               <textarea class="form-input" id="modal-yt-refresh-token-input" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical; border:1.5px solid #10b981;" placeholder="1//... (Google Refresh Token এখানে পেস্ট করুন)"></textarea>
+
+              <!-- Client ID & Secret for Refresh Token exchange -->
+              <div style="margin-top:10px; background:rgba(255,255,255,0.7); border:1px dashed #10b981; border-radius:6px; padding:8px 10px;">
+                <div style="font-size:0.72rem; font-weight:700; color:#065f46; margin-bottom:4px; display:flex; align-items:center; gap:4px;">
+                  <i data-lucide="key" style="width:12px; height:12px;"></i>
+                  <span>OAuth Credentials (যে Client ID দিয়ে Refresh Token নিয়েছেন):</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:4px;">
+                  <div>
+                    <label style="font-size:0.68rem; color:#047857; font-weight:600; display:block; margin-bottom:2px;">Google Client ID:</label>
+                    <input type="text" class="form-input" id="modal-yt-client-id" value="${GoogleAuthService.getClientId() || ''}" placeholder="...apps.googleusercontent.com" style="font-size:0.72rem; padding:5px 8px; font-family:monospace; border:1px solid #6ee7b7;" />
+                  </div>
+                  <div>
+                    <label style="font-size:0.68rem; color:#047857; font-weight:600; display:block; margin-bottom:2px;">Google Client Secret:</label>
+                    <input type="password" class="form-input" id="modal-yt-client-secret" value="${GoogleAuthService.getClientSecret() || ''}" placeholder="GOCSPX-..." style="font-size:0.72rem; padding:5px 8px; font-family:monospace; border:1px solid #6ee7b7;" />
+                  </div>
+                </div>
+                <div style="font-size:0.66rem; color:var(--text-muted); line-height:1.3;">
+                  💡 টিপস: একবার ইনপুট দিলে ব্রাউজারে ও সার্ভারে স্থায়ীভাবে এনক্রিপ্ট হয়ে সেভ থাকবে, আর দিতে হবে না।
+                </div>
+              </div>
+
               <div id="yt-refresh-token-verify-status" style="margin-top:8px; display:none;"></div>
               <div style="margin-top:8px;">
                 <button type="button" class="btn btn-primary btn-sm" id="btn-save-yt-refresh-token" style="background:#059669; border-color:#059669; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700; padding:9px;">
@@ -2395,12 +2417,27 @@ class OmniFlowApp {
               </div>
             </details>
 
-            <!-- Advanced Client ID settings toggle -->
-            <details style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:8px;">
-              <summary style="cursor:pointer; font-weight:600; color:var(--text-muted);">Client ID কনফিগারেশন</summary>
-              <div style="margin-top:8px; display:flex; gap:6px;">
-                <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId || ''}" placeholder="Enter Client ID" style="font-size:0.75rem; font-family:var(--font-mono);" />
-                <button class="btn btn-outline btn-sm" id="btn-save-client-id">Save</button>
+            <!-- Advanced Google OAuth Client ID & Secret settings -->
+            <details style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px; background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px;">
+              <summary style="cursor:pointer; font-weight:700; color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
+                <i data-lucide="key" style="width:13px; height:13px; color:#f59e0b;"></i>
+                <span>Google OAuth Credentials (Client ID ও Client Secret কনফিগারেশন)</span>
+              </summary>
+              <div style="margin-top:10px;">
+                <div style="font-size:0.73rem; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
+                  💡 Google OAuth Playground-এর ডানদিকের ⚙️ Gear আইকনে "Use your own OAuth credentials" চেক করে এই Client ID ও Secret পেস্ট করে Refresh Token সংগ্রহ করতে হয়।
+                </div>
+                <div style="margin-bottom:8px;">
+                  <label class="form-label" style="font-size:0.72rem; margin-bottom:2px;">Client ID:</label>
+                  <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId || GoogleAuthService.getClientId()}" placeholder="Enter Client ID" style="font-size:0.75rem; font-family:var(--font-mono);" />
+                </div>
+                <div style="margin-bottom:8px;">
+                  <label class="form-label" style="font-size:0.72rem; margin-bottom:2px;">Client Secret:</label>
+                  <input type="text" class="form-input" id="input-oauth-client-secret" value="${GoogleAuthService.getClientSecret()}" placeholder="Enter Client Secret" style="font-size:0.75rem; font-family:var(--font-mono);" />
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-save-client-creds" style="font-size:0.75rem; padding:5px 12px;">
+                  <span>Credentials সেভ করুন</span>
+                </button>
               </div>
             </details>
           </div>
@@ -2412,12 +2449,14 @@ class OmniFlowApp {
     `);
     this.refreshIcons();
 
-    const saveClientIdBtn = document.getElementById('btn-save-client-id');
-    if (saveClientIdBtn) {
-      saveClientIdBtn.addEventListener('click', () => {
-        const val = document.getElementById('input-oauth-client-id').value.trim();
-        if (val) GoogleAuthService.setClientId(val);
-        this.showToast('Google Client ID saved!', 'success');
+    const saveClientCredsBtn = document.getElementById('btn-save-client-creds');
+    if (saveClientCredsBtn) {
+      saveClientCredsBtn.addEventListener('click', () => {
+        const idVal = (document.getElementById('input-oauth-client-id')?.value || '').trim();
+        const secretVal = (document.getElementById('input-oauth-client-secret')?.value || '').trim();
+        if (idVal) GoogleAuthService.setClientId(idVal);
+        if (secretVal) GoogleAuthService.setClientSecret(secretVal);
+        this.showToast('Google OAuth Credentials Saved!', 'success');
       });
     }
 
@@ -2554,6 +2593,26 @@ class OmniFlowApp {
           return;
         }
 
+        const clientIdInput = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
+        const clientSecretInput = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
+
+        if (!clientIdInput || !clientSecretInput) {
+          if (statusBox) {
+            statusBox.style.display = 'block';
+            statusBox.innerHTML = `
+              <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:8px 10px; font-size:0.78rem; color:#EF4444; font-weight:600;">
+                ⚠️ অনুগ্রহ করে Google Client ID এবং Client Secret ইনপুট দিন। যে Client ID ও Secret দিয়ে Refresh Token সংগ্রহ করেছিলেন, সেগুলো এখানে পেস্ট করুন।
+              </div>
+            `;
+          }
+          alert('অনুগ্রহ করে Google Client ID এবং Client Secret পূরণ করুন।');
+          return;
+        }
+
+        // Cache in browser storage for instant reuse
+        GoogleAuthService.setClientId(clientIdInput);
+        GoogleAuthService.setClientSecret(clientSecretInput);
+
         saveRefreshBtn.disabled = true;
         saveRefreshBtn.innerText = 'যাচাই ও অটো-রিনিউ সক্রিয় হচ্ছে...';
 
@@ -2563,8 +2622,13 @@ class OmniFlowApp {
         }
 
         try {
-          const check = await GoogleAuthService.testYouTubeToken(refreshInput);
-          GoogleAuthService.setYouTubeToken(project, '', refreshInput);
+          const credOptions = {
+            clientId: clientIdInput,
+            clientSecret: clientSecretInput
+          };
+
+          const check = await GoogleAuthService.testYouTubeToken(refreshInput, credOptions);
+          GoogleAuthService.setYouTubeToken(project, '', refreshInput, credOptions);
 
           const ch = check.channel;
           let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');

@@ -59,7 +59,7 @@ export default async function handler(req, res) {
   // Handle POST - Exchange authorization code, refresh token, or save manual token
   if (req.method === 'POST') {
     const body = req.body || {};
-    const { code, redirectUri, action, token: directToken, refreshToken: explicitRefreshToken } = body;
+    const { code, redirectUri, action, token: directToken, refreshToken: explicitRefreshToken, clientId, clientSecret } = body;
 
     // Action 1: Explicit server-side refresh request
     if (action === 'refresh') {
@@ -85,7 +85,9 @@ export default async function handler(req, res) {
       try {
         const result = await exchangeYouTubeAuthCode({
           code,
-          redirectUri: redirectUri || 'postmessage'
+          redirectUri: redirectUri || 'postmessage',
+          clientId,
+          clientSecret
         });
 
         return res.status(200).json({
@@ -110,7 +112,10 @@ export default async function handler(req, res) {
 
     if (possibleRefreshToken) {
       try {
-        const result = await exchangeRefreshTokenForAccessToken(possibleRefreshToken);
+        const result = await exchangeRefreshTokenForAccessToken(possibleRefreshToken, {
+          clientId,
+          clientSecret
+        });
         return res.status(200).json({
           success: true,
           message: `🎉 চিরস্থায়ী Refresh Token কনফিগার সম্পন্ন! চ্যানেল: "${result.channel.title}"। টোকেন প্রতি ১ ঘণ্টা পর পর সার্ভার নিজে থেকেই অটো রিনিউ করবে।`,

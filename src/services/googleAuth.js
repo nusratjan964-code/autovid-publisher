@@ -1,21 +1,30 @@
 // Google OAuth 2.0 & YouTube Data API v3 Service
 import { storage } from './storage.js';
 
-export const DEFAULT_GOOGLE_CLIENT_ID = '489789622156-nokptei8ilkral58vf8vqopsbe1hf6u5.apps.googleusercontent.com';
-export const DEFAULT_GOOGLE_API_KEY = 'AIzaSyCiYoZaQ2vtn91ypf87qk4hCMInLsTjyzM';
-
 export class GoogleAuthService {
   static codeClient = null;
 
   static getClientId() {
     return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
            (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
-           DEFAULT_GOOGLE_CLIENT_ID;
+           '';
   }
 
   static setClientId(id) {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('omni_google_client_id', (id || '').trim());
+    }
+  }
+
+  static getClientSecret() {
+    return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) || 
+           (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_secret')) || 
+           '';
+  }
+
+  static setClientSecret(secret) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('omni_google_client_secret', (secret || '').trim());
     }
   }
 
@@ -252,10 +261,13 @@ export class GoogleAuthService {
   /**
    * Stores active YouTube Channel details in local project state
    */
-  static setYouTubeToken(project, token, refreshToken = null) {
+  static setYouTubeToken(project, token, refreshToken = null, options = {}) {
     if (!token && !refreshToken) return;
     const cleanToken = (token || '').trim();
     const cleanRefresh = (refreshToken || (cleanToken.startsWith('1//') ? cleanToken : '')).trim();
+
+    const clientId = options.clientId || this.getClientId();
+    const clientSecret = options.clientSecret || this.getClientSecret();
 
     // Persist to server credentials vault asynchronously
     try {
@@ -264,7 +276,9 @@ export class GoogleAuthService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: cleanToken.startsWith('1//') ? null : cleanToken,
-          refreshToken: cleanRefresh || null
+          refreshToken: cleanRefresh || null,
+          clientId,
+          clientSecret
         })
       }).catch(() => {});
     } catch (e) {}
@@ -303,18 +317,25 @@ export class GoogleAuthService {
   /**
    * Tests and validates YouTube OAuth access token or refresh token directly
    */
-  static async testYouTubeToken(token) {
+  static async testYouTubeToken(token, options = {}) {
     if (!token || !token.trim()) {
       throw new Error('Google/YouTube Access Token is empty.');
     }
     const cleanToken = token.trim();
+
+    const clientId = options.clientId || this.getClientId();
+    const clientSecret = options.clientSecret || this.getClientSecret();
 
     // If it's a Refresh Token (starts with 1//), verify via backend token endpoint
     if (cleanToken.startsWith('1//')) {
       const res = await fetch('/api/youtube/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: cleanToken })
+        body: JSON.stringify({
+          refreshToken: cleanToken,
+          clientId,
+          clientSecret
+        })
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
