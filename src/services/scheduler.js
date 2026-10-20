@@ -483,7 +483,8 @@ export class SchedulerService {
             fileBlob,
             {
               title: video.title,
-              description: video.caption
+              description: video.caption,
+              driveFileId: video.driveFileId || null
             },
             ytToken === 'server_vault_yt_token' ? null : ytToken
           );

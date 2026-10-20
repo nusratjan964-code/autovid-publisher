@@ -3191,7 +3191,7 @@ class OmniFlowApp {
         this.showToast(`🎉 "${video.title}" published successfully to ${targetName}!`, 'success');
         this.render();
       } catch (err) {
-        if (err.message && (err.message.includes('TOKEN') || err.message.includes('190') || err.message.includes('token') || err.message.includes('টোকেন') || err.message.includes('Access Token'))) {
+        if (this.isTokenAuthError(err.message)) {
           this.openPublishTokenModal(project, videoId, err.message);
         } else {
           this.showToast(err.message, 'error');
@@ -3481,7 +3481,7 @@ class OmniFlowApp {
           this.showToast(`🎉 "${video.title}" published successfully to ${targetName}!`, 'success');
           this.render();
         } catch (err) {
-          if (err.message && (err.message.includes('TOKEN') || err.message.includes('190') || err.message.includes('token') || err.message.includes('টোকেন') || err.message.includes('Access Token'))) {
+          if (this.isTokenAuthError(err.message)) {
             this.openPublishTokenModal(project, vidId, err.message);
           } else {
             this.showToast(err.message, 'error');
@@ -3993,13 +3993,30 @@ class OmniFlowApp {
       this.showToast(`🎉 "${res.video?.title || 'Video'}" published successfully to ${res.video?.platforms?.join(', ') || 'Social Channels'}!`, 'success');
       this.render();
     } catch (err) {
-      if (err.message && (err.message.includes('TOKEN') || err.message.includes('190') || err.message.includes('token') || err.message.includes('টোকেন') || err.message.includes('Access Token'))) {
+      if (this.isTokenAuthError(err.message)) {
         this.openPublishTokenModal(project, null, err.message);
       } else {
         this.showToast(err.message, 'error');
       }
       this.render();
     }
+  }
+
+  isTokenAuthError(msg) {
+    if (!msg || typeof msg !== 'string') return false;
+    // Strictly exclude JSON syntax errors like "Unexpected token 'R'" or "Request Entity Too Large"
+    if (msg.includes('Unexpected token') || msg.includes('not valid JSON') || msg.includes('SyntaxError') || msg.includes('Request Entity Too Large')) {
+      return false;
+    }
+    return msg.includes('TOKEN_REQUIRED') ||
+           msg.includes('TOKEN_EXPIRED') ||
+           msg.includes('FACEBOOK_TOKEN_REQUIRED') ||
+           msg.includes('YOUTUBE_TOKEN_REQUIRED') ||
+           msg.includes('YOUTUBE_RECONNECT_REQUIRED') ||
+           msg.includes('invalid_grant') ||
+           msg.includes('190') ||
+           msg.includes('টোকেন অনুপস্থিত') ||
+           msg.includes('টোকেন মেয়াদোত্তীর্ণ');
   }
 
   async openPublishTokenModal(project, targetVideoId = null, errorContext = '') {
