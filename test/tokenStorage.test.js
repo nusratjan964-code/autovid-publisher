@@ -166,5 +166,9 @@ describe('TokenStorage — Encrypted Vault & Sanitization', () => {
     disconnectYouTube('user_alice@example.com');
     assert.equal(getDecryptedYouTubeCredentials('user_alice@example.com'), null);
     assert.equal(getDecryptedYouTubeCredentials('user_bob@example.com').channelId, 'UC_BOB');
+
+    // Clean up Bob as well so test residue never pollutes local vault
+    disconnectYouTube('user_bob@example.com');
+    assert.equal(getDecryptedYouTubeCredentials('user_bob@example.com'), null);
   });
 });

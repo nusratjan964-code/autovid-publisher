@@ -194,10 +194,10 @@ export function getMasterChikuBdProject() {
         handle: '@chikubd',
         channelTitle: 'chiku bd',
         channelId: 'UCCOo5jxEtLRgJQUkBMnt-QQ',
-        connected: true,
-        active: true,
-        tokenConfigured: true,
-        hasRefreshToken: true,
+        connected: false,
+        active: false,
+        tokenConfigured: false,
+        hasRefreshToken: false,
         followers: '8.5K',
         lastPost: 'Ready'
       },
@@ -222,7 +222,7 @@ export function getMasterChikuBdProject() {
       times: ['19:00', '21:00', '23:00'],
       timezone: 'Asia/Dhaka',
       postingDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      targetPlatforms: ['facebook', 'youtube']
+      targetPlatforms: ['facebook']
     },
     videos: JSON.parse(JSON.stringify(MASTER_VIDEOS)),
     logs: [

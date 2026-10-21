@@ -67,25 +67,75 @@ class StorageService {
                   if (a.active === undefined) a.active = true;
                 }
                 if (a.id === 'youtube') {
-                  const ytToUse = a.accessToken || a.token || cachedYtToken || '';
-                  if (ytToUse) {
+                  // Purge mock Bob Channel or unwanted mock channels
+                  if (a.channelTitle === 'Bob Channel' || a.channelId === 'UC_BOB') {
+                    a.channelTitle = 'chiku bd';
+                    a.channelId = 'UCCOo5jxEtLRgJQUkBMnt-QQ';
+                    a.handle = '@chikubd';
+                    a.accessToken = '';
+                    a.token = '';
+                    a.refreshToken = '';
+                    a.hasRefreshToken = false;
+                    a.tokenConfigured = false;
+                    a.connected = false;
+                    a.active = false;
+                  }
+
+                  const ytToUse = (a.accessToken || a.token || cachedYtToken || '').trim();
+                  if (ytToUse && ytToUse !== 'server_vault_yt_token' && !ytToUse.includes('bob')) {
                     a.accessToken = ytToUse;
                     a.token = ytToUse;
+                  } else if (ytToUse.includes('bob')) {
+                    a.accessToken = '';
+                    a.token = '';
                   }
-                  if (a.connected === undefined) {
+
+                  // Check if actual YouTube token or permanent refresh token exists
+                  const hasRealToken = !!(
+                    (a.accessToken && !a.accessToken.includes('bob')) ||
+                    a.refreshToken ||
+                    (a.hasRefreshToken && a.tokenConfigured && a.accessToken)
+                  );
+
+                  if (!hasRealToken) {
+                    a.connected = false;
+                    a.active = false;
+                    a.tokenConfigured = false;
+                    a.hasRefreshToken = false;
+                  } else {
                     a.connected = true;
                     a.active = true;
+                    a.tokenConfigured = true;
+                    a.hasRefreshToken = true;
+                    a.isPermanent = true;
                   }
-                  a.tokenConfigured = true;
-                  a.hasRefreshToken = true;
+
+                  if (!a.channelTitle || a.channelTitle === 'md nahid') {
+                    a.channelTitle = 'chiku bd';
+                  }
+                  if (!a.channelId) {
+                    a.channelId = 'UCCOo5jxEtLRgJQUkBMnt-QQ';
+                  }
+                  if (!a.handle || a.handle === '@mdnahid-du5ln') {
+                    a.handle = '@chikubd';
+                  }
                 }
               });
             }
 
             if (p.scheduleSettings) {
               if (Array.isArray(p.scheduleSettings.targetPlatforms)) {
-                if (!p.scheduleSettings.targetPlatforms.includes('facebook')) p.scheduleSettings.targetPlatforms.push('facebook');
-                if (!p.scheduleSettings.targetPlatforms.includes('youtube')) p.scheduleSettings.targetPlatforms.push('youtube');
+                if (!p.scheduleSettings.targetPlatforms.includes('facebook')) {
+                  p.scheduleSettings.targetPlatforms.push('facebook');
+                }
+                const ytAccount = p.socialAccounts?.find(a => a.id === 'youtube');
+                if (ytAccount && ytAccount.connected && ytAccount.active) {
+                  if (!p.scheduleSettings.targetPlatforms.includes('youtube')) {
+                    p.scheduleSettings.targetPlatforms.push('youtube');
+                  }
+                } else {
+                  p.scheduleSettings.targetPlatforms = p.scheduleSettings.targetPlatforms.filter(id => id !== 'youtube');
+                }
               }
               if (!p.scheduleSettings.frequency || p.scheduleSettings.frequency === 1) {
                 p.scheduleSettings.frequency = 3;
