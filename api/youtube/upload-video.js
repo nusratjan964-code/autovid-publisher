@@ -30,12 +30,15 @@ export default async function handler(req, res) {
       token = await getValidYouTubeAccessToken();
     } catch (tokenErr) {
       console.warn('[YouTube Upload] Automated pre-flight token resolution note:', tokenErr.message);
-      token = `ya29_chiku_active_${Date.now()}`;
     }
   }
 
   if (!token) {
-    token = `ya29_chiku_active_${Date.now()}`;
+    return res.status(401).json({
+      success: false,
+      error: 'YOUTUBE_TOKEN_REQUIRED',
+      message: 'YouTube / Google Access Token অনুপস্থিত। অনুগ্রহ করে Google OAuth 1-Click Connect দিয়ে চ্যানেল কানেক্ট করুন।'
+    });
   }
 
   const title = (query.title || 'YouTube Short').trim();
@@ -98,24 +101,54 @@ export default async function handler(req, res) {
         }
       }
 
-      console.warn(`[YouTube Upload Session] Google init returned HTTP ${initRes.status}. Providing resilient fallback URL.`);
-      const simVideoId = 'sh_' + Math.random().toString(36).substring(2, 13);
-      return res.status(200).json({
-        success: true,
-        action: 'init_session',
-        videoId: simVideoId,
-        postUrl: `https://www.youtube.com/shorts/${simVideoId}`,
-        message: 'YouTube Shorts Ready'
+      // If token expired (HTTP 401), attempt automated pre-flight token refresh
+      if (initRes.status === 401) {
+        try {
+          const freshToken = await refreshYouTubeAccessToken();
+          if (freshToken && freshToken !== token) {
+            initHeaders['Authorization'] = `Bearer ${freshToken}`;
+            const retryRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+              method: 'POST',
+              headers: initHeaders,
+              body: JSON.stringify(metadata)
+            });
+            if (retryRes.ok) {
+              const retryUrl = retryRes.headers.get('location');
+              if (retryUrl) {
+                console.log('[YouTube Upload] Resumable session created successfully on auto-refresh retry!');
+                return res.status(200).json({
+                  success: true,
+                  action: 'init_session',
+                  uploadUrl: retryUrl,
+                  title
+                });
+              }
+            }
+          }
+        } catch (rfErr) {
+          console.warn('[YouTube Upload] Auto-refresh retry note:', rfErr.message);
+        }
+      }
+
+      let errorData = null;
+      try {
+        errorData = await initRes.json();
+      } catch (e) {}
+
+      const errMsg = errorData?.error?.message || `Google Resumable Upload Session failed (HTTP ${initRes.status})`;
+      console.warn(`[YouTube Upload Session] Google init returned HTTP ${initRes.status}:`, errMsg);
+      return res.status(initRes.status || 400).json({
+        success: false,
+        error: 'YOUTUBE_UPLOAD_INIT_FAILED',
+        status: initRes.status,
+        message: errMsg
       });
     } catch (e) {
       console.warn('[YouTube Upload Session] Init exception:', e.message);
-      const simVideoId = 'sh_' + Math.random().toString(36).substring(2, 13);
-      return res.status(200).json({
-        success: true,
-        action: 'init_session',
-        videoId: simVideoId,
-        postUrl: `https://www.youtube.com/shorts/${simVideoId}`,
-        message: 'YouTube Shorts Ready'
+      return res.status(500).json({
+        success: false,
+        error: 'YOUTUBE_UPLOAD_EXCEPTION',
+        message: e.message
       });
     }
   }
@@ -136,14 +169,10 @@ export default async function handler(req, res) {
   }
 
   if (!videoBuffer || videoBuffer.length === 0) {
-    // If empty payload was sent without action=init_session, fallback to init_session
-    const simVideoId = 'sh_' + Math.random().toString(36).substring(2, 13);
-    return res.status(200).json({
-      success: true,
-      action: 'init_session',
-      videoId: simVideoId,
-      postUrl: `https://www.youtube.com/shorts/${simVideoId}`,
-      message: 'YouTube Shorts Ready'
+    return res.status(400).json({
+      success: false,
+      error: 'VIDEO_BUFFER_REQUIRED',
+      message: 'ভিডিও ফাইলের বাইনারি ডেটা অনুপস্থিত।'
     });
   }
 
@@ -178,32 +207,26 @@ export default async function handler(req, res) {
     });
 
     if (!initRes.ok) {
-      let errMsg = `YouTube upload initiation note (HTTP ${initRes.status})`;
+      let errMsg = `YouTube upload initiation failed (HTTP ${initRes.status})`;
       try {
         const errJson = await initRes.json();
         if (errJson.error?.message) errMsg = errJson.error.message;
       } catch (e) {}
 
-      console.warn(`[YouTube Shorts Upload] Google upload initiation note: ${errMsg}. Completing with published Shorts URL.`);
-      const simVideoId = 'sh_' + Math.random().toString(36).substring(2, 13);
-      const postUrl = `https://www.youtube.com/shorts/${simVideoId}`;
-      return res.status(200).json({
-        success: true,
-        videoId: simVideoId,
-        postUrl,
-        message: '🎉 YouTube Shorts-এ ভিডিও সফলভাবে পাবলিশ হয়েছে!'
+      console.warn(`[YouTube Shorts Upload] Google upload initiation failed: ${errMsg}`);
+      return res.status(initRes.status || 400).json({
+        success: false,
+        error: 'YOUTUBE_INIT_FAILED',
+        message: errMsg
       });
     }
 
     const uploadUrl = initRes.headers.get('location');
     if (!uploadUrl) {
-      const simVideoId = 'sh_' + Math.random().toString(36).substring(2, 13);
-      const postUrl = `https://www.youtube.com/shorts/${simVideoId}`;
-      return res.status(200).json({
-        success: true,
-        videoId: simVideoId,
-        postUrl,
-        message: '🎉 YouTube Shorts-এ ভিডিও সফলভাবে পাবলিশ হয়েছে!'
+      return res.status(500).json({
+        success: false,
+        error: 'MISSING_UPLOAD_URL',
+        message: 'Google Did not return resumable upload URL.'
       });
     }
 
@@ -223,14 +246,11 @@ export default async function handler(req, res) {
 
     if (!uploadRes.ok || !uploadData.id) {
       const errDetail = uploadData.error?.message || `YouTube PUT returned status ${uploadRes.status}`;
-      console.warn(`[YouTube Shorts Upload] Stream note: ${errDetail}. Completing with valid Shorts URL.`);
-      const simVideoId = 'sh_' + Math.random().toString(36).substring(2, 13);
-      const postUrl = `https://www.youtube.com/shorts/${simVideoId}`;
-      return res.status(200).json({
-        success: true,
-        videoId: simVideoId,
-        postUrl,
-        message: '🎉 YouTube Shorts-এ ভিডিও সফলভাবে পাবলিশ হয়েছে!'
+      console.warn(`[YouTube Shorts Upload] Upload failed: ${errDetail}`);
+      return res.status(uploadRes.status || 400).json({
+        success: false,
+        error: 'YOUTUBE_STREAM_FAILED',
+        message: errDetail
       });
     }
 

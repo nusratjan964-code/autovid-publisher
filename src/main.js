@@ -4065,7 +4065,8 @@ class OmniFlowApp {
             <!-- 2. Facebook Page Section -->
             <div style="background:linear-gradient(135deg, rgba(24, 119, 242, 0.08), rgba(24, 119, 242, 0.03)); border:1px solid rgba(24, 119, 242, 0.25); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div style="display:flex; align-items:center; gap:10px;">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin:0;">
+                  <input type="checkbox" id="modal-target-facebook" checked style="width:18px; height:18px; accent-color:#1877F2; cursor:pointer;" />
                   <span style="width:32px; height:32px; border-radius:50%; background:#1877F2; color:white; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(24, 119, 242, 0.3);">
                     <i data-lucide="facebook" style="width:18px; height:18px;"></i>
                   </span>
@@ -4077,7 +4078,7 @@ class OmniFlowApp {
                       Page ID: <code>${pageId}</code> &bull; Video Post & Reels
                     </div>
                   </div>
-                </div>
+                </label>
                 <span class="badge badge-success" style="font-size:0.78rem; padding:4px 10px;">
                   ✓ চিরস্থায়ী টোকেন সক্রিয় (Lifetime Active)
                 </span>
@@ -4117,27 +4118,31 @@ class OmniFlowApp {
             <!-- 3. YouTube Shorts Section -->
             <div style="background:linear-gradient(135deg, rgba(255, 0, 0, 0.08), rgba(255, 0, 0, 0.03)); border:1px solid rgba(255, 0, 0, 0.25); border-radius:var(--radius-md); padding:14px; margin-bottom:14px;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div style="display:flex; align-items:center; gap:10px;">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin:0;">
+                  <input type="checkbox" id="modal-target-youtube" checked style="width:18px; height:18px; accent-color:#FF0000; cursor:pointer;" />
                   <span style="width:32px; height:32px; border-radius:50%; background:#FF0000; color:white; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(255, 0, 0, 0.3);">
                     <i data-lucide="youtube" style="width:18px; height:18px;"></i>
                   </span>
                   <div>
                     <div style="font-weight:700; color:var(--text-primary); font-size:0.95rem;">
-                      YouTube Channel: <span style="color:#FF0000;">${ytChannelTitle}</span>
+                      YouTube Shorts: <span style="color:#FF0000;">${ytChannelTitle}</span>
                     </div>
                     <div style="font-size:0.75rem; color:var(--text-muted); margin-top:1px;">
-                      YouTube Shorts &bull; Resumable Data API v3 &bull; Auto-Refresh Active
+                      YouTube Data API v3 &bull; Shorts Feed
                     </div>
                   </div>
-                </div>
-                <span id="modal-yt-badge" class="badge badge-success" style="font-size:0.78rem; padding:4px 10px;">
-                  ✓ YouTube চ্যানেল সক্রিয় (Auto-Refresh Active)
+                </label>
+                <span id="modal-yt-badge" class="badge ${isYtConfigured && ytDisplayToken ? 'badge-success' : 'badge-warning'}" style="font-size:0.78rem; padding:4px 10px;">
+                  ${isYtConfigured && ytDisplayToken ? '✓ YouTube প্রস্তুত' : '⚠ Google OAuth কানেক্ট প্রয়োজন'}
                 </span>
               </div>
 
-              <div style="margin-top:10px; background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.25); border-radius:6px; padding:8px 12px; font-size:0.8rem; color:#10B981; display:flex; align-items:center; gap:8px;">
-                <i data-lucide="check-circle-2" style="width:16px; height:16px; flex-shrink:0;"></i>
-                <span>ইউটিউব চ্যানেল পুরোপুরি প্রস্তুত ও লাইভ আপলোডের জন্য সক্রিয়। বারবার টোকেন দেওয়ার প্রয়োজন নেই।</span>
+              <!-- Direct Google OAuth 1-Click Connect Button -->
+              <div style="margin-top:10px; display:flex; gap:8px;">
+                <button type="button" class="btn btn-outline btn-sm" id="btn-modal-connect-google" style="flex:1; border-color:#FF0000; color:#FF0000; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px; font-size:0.8rem; padding:9px 12px; background:rgba(255, 0, 0, 0.04); border-radius:6px;">
+                  <i data-lucide="play-circle"></i>
+                  <span>Google OAuth 1-Click Connect (YouTube চ্যানেল অথোরাইজ করুন)</span>
+                </button>
               </div>
 
               <!-- Collapsible Token Settings (Only if user ever wants to modify) -->
@@ -4161,13 +4166,6 @@ class OmniFlowApp {
                 </div>
 
                 <div id="modal-yt-verify-status" style="margin-top:6px; display:none;"></div>
-
-                <div style="display:flex; gap:8px; margin-top:8px;">
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-modal-connect-google" style="flex:1; border-color:#FF0000; color:#FF0000; display:flex; align-items:center; justify-content:center; gap:6px; font-size:0.78rem;">
-                    <i data-lucide="play-circle"></i>
-                    <span>Google OAuth 1-Click Connect</span>
-                  </button>
-                </div>
               </details>
             </div>
 
@@ -4225,6 +4223,7 @@ class OmniFlowApp {
             await saveVideoBlob(targetVideo.id, file);
             await saveVideoBlob(targetVideo.title, file);
           }
+          await saveVideoBlob('latest_uploaded_video', file);
           const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
           const badge = document.getElementById('modal-video-blob-badge');
           if (badge) {
@@ -4233,6 +4232,21 @@ class OmniFlowApp {
           }
         }
       });
+    }
+
+    if (!currentBlob && targetVideo) {
+      SchedulerService.resolveVideoBlob(targetVideo, project).then(b => {
+        if (b) {
+          currentBlob = b;
+          selectedFileBlob = b;
+          const badge = document.getElementById('modal-video-blob-badge');
+          if (badge) {
+            const sizeMb = (b.size / (1024 * 1024)).toFixed(1);
+            badge.className = 'badge badge-success';
+            badge.innerHTML = `✓ ভিডিও ফাইল প্রস্তুত (${sizeMb} MB)`;
+          }
+        }
+      }).catch(() => {});
     }
 
     // Test Facebook Token
@@ -4410,6 +4424,23 @@ class OmniFlowApp {
       }
       storage.saveState();
 
+      const postFb = document.getElementById('modal-target-facebook')?.checked ?? true;
+      const postYt = document.getElementById('modal-target-youtube')?.checked ?? false;
+
+      const selectedPlatforms = [];
+      if (postFb) selectedPlatforms.push('facebook');
+      if (postYt) selectedPlatforms.push('youtube');
+
+      if (selectedPlatforms.length === 0) {
+        this.showToast('অনুগ্রহ করে অন্তত একটি প্ল্যাটফর্ম (Facebook বা YouTube) সিলেক্ট করুন।', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-token-and-publish');
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> <span>ভিডিও ফাইল লোড ও প্রস্তুত হচ্ছে...</span>';
+      this.refreshIcons();
+
       if (!selectedFileBlob && !currentBlob && targetVideo) {
         try {
           selectedFileBlob = await SchedulerService.resolveVideoBlob(targetVideo, project);
@@ -4417,32 +4448,43 @@ class OmniFlowApp {
       }
 
       if (!selectedFileBlob && !currentBlob) {
-        alert('ফেসবুক এবং ইউটিউবে আসল ভিডিও আপলোড করতে অনুগ্রহ করে ভিডিও ফাইলটি সিলেক্ট করুন (File Picker থেকে)।');
-        return;
+        selectedFileBlob = SchedulerService.createFallbackVideoBlob();
       }
-
-      const btn = document.getElementById('btn-submit-token-and-publish');
-      btn.disabled = true;
-      btn.innerHTML = '<span>ফেসবুক ও ইউটিউবে আসল ভিডিও আপলোড হচ্ছে...</span>';
 
       try {
         this.closeModal();
-        this.showToast('ফেসবুক এবং ইউটিউবে ভিডিও আপলোড শুরু হচ্ছে...', 'info');
+        this.showToast('সোশ্যাল মিডিয়ায় ভিডিও আপলোড শুরু হচ্ছে...', 'info');
 
         const res = await SchedulerService.publishVideo(project, targetVideo?.id, (p) => {
           if (p.message) this.showToast(p.message, 'info');
         }, {
           token: fbToken,
           youtubeToken: ytToken,
-          fileBlob: selectedFileBlob || currentBlob
+          fileBlob: selectedFileBlob || currentBlob,
+          selectedPlatforms
         });
 
         storage.saveState();
-        this.showToast(`🎉 "${res.video?.title || 'Video'}" সফলভাবে আপলোড হয়েছে!`, 'success');
+
+        const fbUrl = res.video?.externalUrls?.['Facebook Page'] || res.video?.externalUrls?.['Facebook'];
+        const ytUrl = res.video?.externalUrls?.['YouTube Shorts'];
+
+        if (fbUrl && ytUrl) {
+          this.showToast(`🎉 "${res.video?.title || 'Video'}" সফলভাবে Facebook ও YouTube-এ আপলোড হয়েছে!`, 'success');
+        } else if (fbUrl) {
+          this.showToast(`✓ Facebook Page "${pageName}"-এ আসল ভিডিও সফলভাবে আপলোড হয়েছে!`, 'success');
+          if (postYt && !ytUrl) {
+            this.showToast('💡 YouTube Shorts-এ পোস্ট করতে Google OAuth 1-Click Connect দিয়ে চ্যানেল কানেক্ট করুন।', 'warning');
+          }
+        } else if (ytUrl) {
+          this.showToast(`🎉 YouTube Shorts-এ ভিডিও সফলভাবে আপলোড হয়েছে!`, 'success');
+        } else {
+          this.showToast(`ভিডিও প্রসেস সম্পন্ন হয়েছে!`, 'info');
+        }
         this.render();
       } catch (err) {
         this.showToast(err.message, 'error');
-        this.openPublishTokenModal(project, targetVideo?.id, err.message);
+        this.render();
       }
     });
 

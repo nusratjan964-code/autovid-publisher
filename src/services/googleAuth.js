@@ -464,6 +464,7 @@ export class GoogleAuthService {
     const cleanToken = accessToken && accessToken !== 'server_vault_yt_token' ? accessToken : null;
     const blobSize = fileBlob.size;
     const blobType = fileBlob.type || 'video/mp4';
+    let lastErr = '';
 
     console.log(`[GoogleAuth] Initiating direct YouTube Shorts upload (${(blobSize / (1024 * 1024)).toFixed(2)} MB)...`);
 
@@ -515,32 +516,25 @@ export class GoogleAuthService {
               videoId: putData.id,
               postUrl: `https://www.youtube.com/shorts/${putData.id}`
             };
+          } else {
+            throw new Error(`YouTube CDN stream failed: ${putData.error?.message || putRes.statusText || putRes.status}`);
           }
-
-          if (sessionData.videoId) {
-            return {
-              success: true,
-              videoId: sessionData.videoId,
-              postUrl: sessionData.postUrl || `https://www.youtube.com/shorts/${sessionData.videoId}`
-            };
-          }
-        } else if (sessionData.videoId) {
-          return {
-            success: true,
-            videoId: sessionData.videoId,
-            postUrl: sessionData.postUrl || `https://www.youtube.com/shorts/${sessionData.videoId}`
-          };
         }
       }
 
+      if (sessionData.error === 'YOUTUBE_TOKEN_REQUIRED' || sessionRes.status === 401) {
+        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube / Google Access Token অনুপস্থিত বা মেয়াদোত্তীর্ণ। অনুগ্রহ করে Google OAuth দিয়ে চ্যানেল কানেক্ট করুন।');
+      }
+
       if (sessionData.error || !sessionRes.ok) {
-        console.warn('[GoogleAuth] Upload session initialization note:', sessionData.error || sessionRes.status);
+        throw new Error(sessionData.message || sessionData.error || `YouTube upload session creation failed (HTTP ${sessionRes.status})`);
       }
     } catch (sessionErr) {
-      if (sessionErr.message && sessionErr.message.includes('VIDEO_BLOB')) {
+      if (sessionErr.message && (sessionErr.message.includes('VIDEO_BLOB') || sessionErr.message.includes('YOUTUBE_TOKEN_REQUIRED'))) {
         throw sessionErr;
       }
-      console.warn('[GoogleAuth] Direct upload attempt note:', sessionErr.message);
+      console.warn('[GoogleAuth] Resumable upload attempt note:', sessionErr.message);
+      lastErr = sessionErr.message;
     }
 
     // Step 2: Fallback for small files (< 4MB) via server relay
@@ -555,32 +549,23 @@ export class GoogleAuthService {
           body: fileBlob
         });
 
-        const relayText = await relayRes.text();
-        let relayData = {};
-        try {
-          relayData = JSON.parse(relayText);
-        } catch (e) {}
+        const relayData = await relayRes.json();
 
-        if (relayRes.ok && relayData.success && (relayData.videoId || relayData.postUrl)) {
+        if (relayRes.ok && relayData.success && relayData.videoId) {
           return {
             success: true,
             videoId: relayData.videoId,
             postUrl: relayData.postUrl || `https://www.youtube.com/shorts/${relayData.videoId}`
           };
+        } else {
+          throw new Error(relayData.message || relayData.error || 'Server relay upload failed');
         }
       } catch (rErr) {
         console.warn('[GoogleAuth] Small relay fallback note:', rErr.message);
+        lastErr = rErr.message;
       }
     }
 
-    // Step 3: Resilient fallback (never crash the publishing pipeline)
-    const simVideoId = 'sh_' + Math.random().toString(36).substring(2, 13);
-    const postUrl = `https://www.youtube.com/shorts/${simVideoId}`;
-    console.log('[GoogleAuth] Completed publishing with verified Shorts URL:', postUrl);
-    return {
-      success: true,
-      videoId: simVideoId,
-      postUrl
-    };
+    throw new Error(lastErr || 'YouTube Shorts আপলোড সম্পন্ন করা যায়নি। অনুগ্রহ করে চ্যানেল সংযোগ যাচাই করুন।');
   }
 }
