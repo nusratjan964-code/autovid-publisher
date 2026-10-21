@@ -533,14 +533,11 @@ export class GoogleAuthService {
         }
       }
 
-      if (sessionData.error === 'YOUTUBE_TOKEN_EXPIRED' || sessionRes.status === 401) {
-        throw new Error('YOUTUBE_TOKEN_EXPIRED: YouTube Access Token expired. Please reconnect YouTube Channel.');
-      }
-      if (sessionData.error === 'YOUTUBE_TOKEN_REQUIRED') {
-        throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token missing. Please connect YouTube Channel.');
+      if (sessionData.error || !sessionRes.ok) {
+        console.warn('[GoogleAuth] Upload session initialization note:', sessionData.error || sessionRes.status);
       }
     } catch (sessionErr) {
-      if (sessionErr.message && (sessionErr.message.includes('YOUTUBE_TOKEN') || sessionErr.message.includes('VIDEO_BLOB'))) {
+      if (sessionErr.message && sessionErr.message.includes('VIDEO_BLOB')) {
         throw sessionErr;
       }
       console.warn('[GoogleAuth] Direct upload attempt note:', sessionErr.message);

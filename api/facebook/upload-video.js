@@ -86,13 +86,20 @@ export default async function handler(req, res) {
   try {
     console.log(`[Facebook Video Upload] Streaming ${(videoBuffer.length / (1024 * 1024)).toFixed(2)} MB video to Page ${pageId}...`);
 
-    const fbRes = await fetch(`https://graph-video.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pageId)}/videos?access_token=${encodeURIComponent(effectiveToken)}`, {
+    const title = (query.title || 'Video').substring(0, 100);
+    const description = query.description || query.caption || '';
+
+    // Create pristine FormData with explicit video.mp4 filename and video/mp4 MIME type
+    const form = new FormData();
+    const videoBlob = new Blob([videoBuffer], { type: 'video/mp4' });
+    form.append('access_token', effectiveToken);
+    form.append('title', title);
+    form.append('description', description);
+    form.append('source', videoBlob, 'video.mp4');
+
+    const fbRes = await fetch(`https://graph-video.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pageId)}/videos`, {
       method: 'POST',
-      headers: {
-        'content-type': req.headers['content-type'] || 'multipart/form-data',
-        'content-length': String(videoBuffer.length)
-      },
-      body: videoBuffer
+      body: form
     });
 
     let fbData = await fbRes.json();
@@ -109,13 +116,15 @@ export default async function handler(req, res) {
           const renew = await autoRenewFacebookPageToken(pageId);
           if (renew && renew.token && renew.token !== effectiveToken) {
             console.log(`[Facebook Video Upload] Retrying upload with auto-renewed token...`);
-            const retryRes = await fetch(`https://graph-video.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pageId)}/videos?access_token=${encodeURIComponent(renew.token)}`, {
+            const retryForm = new FormData();
+            retryForm.append('access_token', renew.token);
+            retryForm.append('title', title);
+            retryForm.append('description', description);
+            retryForm.append('source', videoBlob, 'video.mp4');
+
+            const retryRes = await fetch(`https://graph-video.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(pageId)}/videos`, {
               method: 'POST',
-              headers: {
-                'content-type': req.headers['content-type'] || 'multipart/form-data',
-                'content-length': String(videoBuffer.length)
-              },
-              body: videoBuffer
+              body: retryForm
             });
             const retryData = await retryRes.json();
             if (retryRes.ok && retryData.id) {

@@ -1,5 +1,5 @@
 // Master Default Account & Project Data for Nahid / Chiku bd
-export const MASTER_FB_TOKEN = '';
+export const MASTER_FB_TOKEN = (typeof localStorage !== 'undefined' ? (localStorage.getItem('omni_fb_page_token') || localStorage.getItem('omni_fb_access_token') || '') : '');
 
 export const MASTER_VIDEOS = [
   {

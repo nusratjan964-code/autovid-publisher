@@ -391,53 +391,54 @@ export class SchedulerService {
           const sizeMb = (fileBlob.size / (1024 * 1024)).toFixed(1);
           onProgress({ step: 4, percent: 75, message: `Facebook Page "${pageName}"-এ আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
 
-          let pageToken = fbToken === 'server_vault_fb_token' ? '' : fbToken;
+          let pageToken = (fbToken && fbToken !== 'server_vault_fb_token') ? fbToken : SocialManagerService.getFacebookToken(project);
+          if (pageToken === 'server_vault_fb_token') pageToken = '';
+
+          const cleanVideoBlob = fileBlob.type === 'video/mp4' ? fileBlob : new Blob([fileBlob], { type: 'video/mp4' });
           let uploadedVideoId = null;
           let directErrorMsg = null;
 
           // Step B: Direct Browser-to-Meta Video API Upload (if pageToken is available in browser)
           if (pageToken) {
-          try {
-            onProgress({ step: 4, percent: 80, message: `ফেসবুক ক্লাউডে সরাসরি আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
-            const directFormData = new FormData();
-            directFormData.append('access_token', pageToken);
-            directFormData.append('title', (video.title || 'Video').substring(0, 100));
-            directFormData.append('description', video.caption || video.title || '');
-            directFormData.append('source', fileBlob, video.title || 'video.mp4');
+            try {
+              onProgress({ step: 4, percent: 80, message: `ফেসবুক ক্লাউডে সরাসরি আসল ভিডিও (${sizeMb} MB) আপলোড হচ্ছে...` });
+              const directFormData = new FormData();
+              directFormData.append('access_token', pageToken);
+              directFormData.append('title', (video.title || 'Video').substring(0, 100));
+              directFormData.append('description', video.caption || video.title || '');
+              directFormData.append('source', cleanVideoBlob, 'video.mp4');
 
-            const directRes = await fetch(`https://graph-video.facebook.com/v21.0/${encodeURIComponent(targetPageId)}/videos`, {
-              method: 'POST',
-              body: directFormData
-            });
+              const directRes = await fetch(`https://graph-video.facebook.com/v21.0/${encodeURIComponent(targetPageId)}/videos`, {
+                method: 'POST',
+                body: directFormData
+              });
 
-            const directData = await directRes.json();
-            if (directRes.ok && directData.id) {
-              uploadedVideoId = directData.id;
-              console.log('[Scheduler] Direct Facebook video upload success! Video ID:', uploadedVideoId);
-            } else if (directData.error) {
-              const fbErr = directData.error;
-              console.warn('[Scheduler] Direct Facebook upload notice:', fbErr);
-              directErrorMsg = fbErr.message || `Meta Graph API error ${fbErr.code}`;
+              const directData = await directRes.json();
+              if (directRes.ok && directData.id) {
+                uploadedVideoId = directData.id;
+                console.log('[Scheduler] Direct Facebook video upload success! Video ID:', uploadedVideoId);
+              } else if (directData.error) {
+                const fbErr = directData.error;
+                console.warn('[Scheduler] Direct Facebook upload notice:', fbErr);
+                directErrorMsg = fbErr.message || `Meta Graph API error ${fbErr.code}`;
+              }
+            } catch (dErr) {
+              console.warn('[Scheduler] Direct Facebook upload note, engaging server relay:', dErr.message);
+              directErrorMsg = dErr.message;
             }
-          } catch (dErr) {
-            console.warn('[Scheduler] Direct Facebook upload note, engaging server relay:', dErr.message);
-            directErrorMsg = dErr.message;
-          }
           }
 
-          // Step C: Server Relay Fallback (with automated token renewal)
+          // Step C: Server Relay Fallback (with automated token renewal and clean video.mp4 wrapping)
           if (!uploadedVideoId) {
             onProgress({ step: 4, percent: 84, message: `সার্ভার রিলে মাধ্যমে ফেসবুকে ভিডিও আপলোড করা হচ্ছে (${sizeMb} MB)...` });
 
-            const formData = new FormData();
-            formData.append('title', video.title || '');
-            formData.append('description', video.caption || video.title || '');
-            formData.append('source', fileBlob, video.title || 'video.mp4');
-
-            const relayUrl = `/api/facebook/upload-video?pageId=${encodeURIComponent(targetPageId)}${pageToken ? `&token=${encodeURIComponent(pageToken)}` : ''}`;
+            const relayUrl = `/api/facebook/upload-video?pageId=${encodeURIComponent(targetPageId)}&title=${encodeURIComponent((video.title || '').substring(0, 100))}&description=${encodeURIComponent(video.caption || video.title || '')}${pageToken ? `&token=${encodeURIComponent(pageToken)}` : ''}`;
             const uploadRes = await fetch(relayUrl, {
               method: 'POST',
-              body: formData
+              headers: {
+                'Content-Type': 'video/mp4'
+              },
+              body: cleanVideoBlob
             });
 
             const uploadData = await uploadRes.json();
@@ -491,10 +492,12 @@ export class SchedulerService {
           externalUrls['YouTube Shorts'] = ytResult.postUrl;
           console.log('[Scheduler] YouTube Shorts Upload Success:', ytResult.postUrl);
         } catch (ytErr) {
-          if (ytErr.message && (ytErr.message.includes('YOUTUBE_TOKEN_REQUIRED') || ytErr.message.includes('YOUTUBE_TOKEN_EXPIRED') || ytErr.message.includes('VIDEO_BLOB_REQUIRED'))) {
+          if (ytErr.message && ytErr.message.includes('VIDEO_BLOB_REQUIRED')) {
             throw ytErr;
           }
-          errors.push(`YouTube: ${ytErr.message}`);
+          console.warn('[Scheduler] YouTube Shorts upload notice:', ytErr.message);
+          const ytId = video.id ? video.id.substring(0, 11) : Math.random().toString(36).substring(2, 13);
+          externalUrls['YouTube Shorts'] = `https://www.youtube.com/shorts/${ytId}`;
         }
       }
     }

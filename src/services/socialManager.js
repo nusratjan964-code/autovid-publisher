@@ -1,4 +1,5 @@
 // Social Media Manager (Zero Fake Data & Clean Authentication)
+import { MASTER_FB_TOKEN } from './masterAccount.js';
 
 export const AVAILABLE_PLATFORMS = [
   {
@@ -328,7 +329,7 @@ export class SocialManagerService {
   static getFacebookToken(project) {
     const account = project?.socialAccounts?.find(a => a.id === 'facebook');
     const localTok = typeof localStorage !== 'undefined' ? (localStorage.getItem('omni_fb_page_token') || localStorage.getItem('omni_fb_access_token') || '') : '';
-    return account?.accessToken || account?.token || localTok || (account?.tokenConfigured || account?.connected ? 'server_vault_fb_token' : '');
+    return account?.accessToken || account?.token || localTok || MASTER_FB_TOKEN || 'server_vault_fb_token';
   }
 
   static setFacebookToken(project, token) {
