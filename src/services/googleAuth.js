@@ -16,14 +16,13 @@ export class GoogleAuthService {
   static codeClient = null;
 
   static getClientId() {
-    let id = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || 
-             (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_id')) || 
-             '';
-    id = sanitizeGoogleClientId(id);
-    if (!id && typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) {
-      id = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    let localId = typeof localStorage !== 'undefined' ? (localStorage.getItem('omni_google_client_id') || '') : '';
+    if (localId && (localId.includes('489789622156') || localId.includes('nokpte'))) {
+      try { localStorage.removeItem('omni_google_client_id'); } catch (e) {}
+      localId = '';
     }
-    return id;
+    const envId = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) || '';
+    return sanitizeGoogleClientId(envId || localId || '');
   }
 
   static setClientId(id) {
@@ -34,14 +33,13 @@ export class GoogleAuthService {
   }
 
   static getClientSecret() {
-    let secret = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) || 
-                 (typeof localStorage !== 'undefined' && localStorage.getItem('omni_google_client_secret')) || 
-                 '';
-    secret = (secret || '').trim();
-    if ((!secret || secret.includes('•') || secret.includes('*')) && typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) {
-      secret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET;
+    let localSecret = typeof localStorage !== 'undefined' ? (localStorage.getItem('omni_google_client_secret') || '') : '';
+    if (localSecret && (localSecret.includes('sQnCmjzGvvBwSS59DLfuDmLx1r24') || localSecret.includes('•') || localSecret.includes('*'))) {
+      try { localStorage.removeItem('omni_google_client_secret'); } catch (e) {}
+      localSecret = '';
     }
-    return secret;
+    const envSecret = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_SECRET) || '';
+    return (envSecret || localSecret || '').trim();
   }
 
   static setClientSecret(secret) {
@@ -105,6 +103,7 @@ export class GoogleAuthService {
             ].join(' '),
             ux_mode: 'popup',
             select_account: true,
+            prompt: 'consent',
             callback: async (response) => {
               if (response.error) {
                 console.error('[GoogleAuth] OAuth Code Error:', response);
@@ -196,7 +195,11 @@ export class GoogleAuthService {
             }
           });
 
-          client.requestCode();
+          try {
+            client.requestCode({ prompt: 'consent' });
+          } catch (reqErr) {
+            client.requestCode();
+          }
         } catch (err) {
           console.error('[GoogleAuth] Failed executing code flow:', err);
           safeReject(err);
@@ -268,7 +271,11 @@ export class GoogleAuthService {
             ytAccount.expiresAt = data.expiresAt;
             ytAccount.status = data.status;
             ytAccount.lastError = data.lastError;
+            if (ytAccount.hasRefreshToken) {
+              ytAccount.isPermanent = true;
+            }
           }
+          storage.saveState();
           return true;
         }
       }

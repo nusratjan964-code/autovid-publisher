@@ -94,7 +94,9 @@ class StorageService {
                   const hasRealToken = !!(
                     (a.accessToken && !a.accessToken.includes('bob')) ||
                     a.refreshToken ||
-                    (a.hasRefreshToken && a.tokenConfigured && a.accessToken)
+                    a.hasRefreshToken ||
+                    a.tokenConfigured ||
+                    (cachedYtToken && cachedYtToken !== 'server_vault_yt_token' && !cachedYtToken.includes('bob'))
                   );
 
                   if (!hasRealToken) {
@@ -106,8 +108,10 @@ class StorageService {
                     a.connected = true;
                     a.active = true;
                     a.tokenConfigured = true;
-                    a.hasRefreshToken = true;
-                    a.isPermanent = true;
+                    if (a.hasRefreshToken || a.refreshToken) {
+                      a.hasRefreshToken = true;
+                      a.isPermanent = true;
+                    }
                   }
 
                   if (!a.channelTitle || a.channelTitle === 'md nahid') {
@@ -434,6 +438,10 @@ class StorageService {
   addVideoToActiveProject(videoData) {
     const project = this.getActiveProject();
     if (!project) return null;
+    if (!Array.isArray(project.videos)) {
+      project.videos = [];
+    }
+    const targetPlatforms = project.scheduleSettings?.targetPlatforms || ['facebook', 'youtube'];
     const newVideo = {
       id: 'vid_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
       status: 'ready',
@@ -441,7 +449,7 @@ class StorageService {
       publishedAt: null,
       caption: '',
       hook: '',
-      platforms: project.scheduleSettings.targetPlatforms || [],
+      platforms: targetPlatforms,
       ...videoData
     };
     project.videos.unshift(newVideo);

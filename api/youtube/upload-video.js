@@ -1,5 +1,5 @@
 // Server-side YouTube Shorts Resumable Upload Relay
-import { getValidYouTubeAccessToken } from '../../lib/youtubeTokenManager.js';
+import { getValidYouTubeAccessToken, refreshYouTubeAccessToken } from '../../lib/youtubeTokenManager.js';
 
 export const config = {
   api: {
@@ -24,13 +24,17 @@ export default async function handler(req, res) {
   const query = req.query || {};
   const directToken = (query.token || req.headers['authorization']?.replace(/^Bearer\s+/i, '') || '').trim();
 
-  let token = (directToken && directToken !== 'server_vault_yt_token' && directToken !== 'undefined') ? directToken : '';
+  let token = '';
+  // Priority 1: Automated pre-flight validation & refresh from server vault
+  try {
+    token = await getValidYouTubeAccessToken();
+  } catch (tokenErr) {
+    console.log('[YouTube Upload] Server vault pre-flight token note:', tokenErr.message);
+  }
+
+  // Priority 2: Direct token from client if server vault had no token
   if (!token) {
-    try {
-      token = await getValidYouTubeAccessToken();
-    } catch (tokenErr) {
-      console.warn('[YouTube Upload] Automated pre-flight token resolution note:', tokenErr.message);
-    }
+    token = (directToken && directToken !== 'server_vault_yt_token' && directToken !== 'undefined') ? directToken : '';
   }
 
   if (!token) {
@@ -195,7 +199,7 @@ export default async function handler(req, res) {
       }
     };
 
-    const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    let initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -205,6 +209,28 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify(metadata)
     });
+
+    if (!initRes.ok) {
+      if (initRes.status === 401) {
+        try {
+          const freshToken = await refreshYouTubeAccessToken();
+          if (freshToken) {
+            initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${freshToken}`,
+                'Content-Type': 'application/json; charset=UTF-8',
+                'X-Upload-Content-Length': String(videoBuffer.length),
+                'X-Upload-Content-Type': contentType
+              },
+              body: JSON.stringify(metadata)
+            });
+          }
+        } catch (rfErr) {
+          console.warn('[YouTube Upload] Direct retry refresh note:', rfErr.message);
+        }
+      }
+    }
 
     if (!initRes.ok) {
       let errMsg = `YouTube upload initiation failed (HTTP ${initRes.status})`;

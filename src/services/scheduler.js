@@ -377,9 +377,10 @@ export class SchedulerService {
     }
 
     // Platform selection filtering
-    const selectedPlatforms = options.selectedPlatforms || null;
-    const shouldPublishFb = !selectedPlatforms || selectedPlatforms.includes('facebook');
-    const shouldPublishYt = !selectedPlatforms || selectedPlatforms.includes('youtube');
+    const projectPlatforms = project.scheduleSettings?.targetPlatforms || [];
+    const selectedPlatforms = options.selectedPlatforms || (projectPlatforms.length > 0 ? projectPlatforms : (video.platforms?.length ? video.platforms : ['facebook']));
+    const shouldPublishFb = selectedPlatforms.includes('facebook');
+    const shouldPublishYt = selectedPlatforms.includes('youtube');
 
     // Pre-flight Credentials Resolution & Validation
     const fbAccount = activeConnectedPlatforms.find(a => a.id === 'facebook');
@@ -393,10 +394,10 @@ export class SchedulerService {
       const fbConfigured = !!(fbToken || fbAccount?.tokenConfigured || fbAccount?.connected);
       const ytConfigured = !!(ytToken || ytAccount?.tokenConfigured || ytAccount?.hasRefreshToken || ytAccount?.connected);
 
-      if (fbAccount && shouldPublishFb && !fbConfigured) {
+      if (shouldPublishFb && !fbConfigured) {
         throw new Error('FACEBOOK_TOKEN_REQUIRED: Facebook Page Access Token অনুপস্থিত। ফেসবুকে পোস্ট করতে Access Token দিন বা পেজ কানেক্ট করুন।');
       }
-      if (ytAccount && shouldPublishYt && !ytConfigured) {
+      if (shouldPublishYt && !ytConfigured) {
         throw new Error('YOUTUBE_TOKEN_REQUIRED: YouTube Access Token অনুপস্থিত। ইউটিউব শর্টস-এ ভিডিও আপলোড করতে Google একাউন্ট কানেক্ট করুন।');
       }
     }
