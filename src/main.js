@@ -2294,153 +2294,70 @@ class OmniFlowApp {
   // --- GOOGLE OAUTH 2.0 YOUTUBE MODAL ---
   openYouTubeOAuthModal(platform) {
     const project = storage.getActiveProject();
-    const currentClientId = GoogleAuthService.getClientId();
-
-    const existingToken = GoogleAuthService.getYouTubeToken(project);
     const ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
-    const defaultHandle = ytAccount?.handle || '@chikubd';
+    const isConnected = !!(ytAccount?.connected || ytAccount?.hasRefreshToken);
+    const channelTitle = ytAccount?.channelTitle || 'chiku bd';
+    const channelHandle = ytAccount?.handle || '@chikubd';
 
     this.openModal(`
       <div class="modal-backdrop">
-        <div class="modal-card" style="max-width:580px;">
+        <div class="modal-card" style="max-width:520px;">
           <div class="modal-header">
             <h3 class="modal-title" style="display:flex; align-items:center; gap:10px;">
               <span style="width:34px; height:34px; border-radius:var(--radius-sm); background:#FF0000; color:white; display:flex; align-items:center; justify-content:center;">
                 <i data-lucide="youtube"></i>
               </span>
-              <span>Connect YouTube Shorts (Data API v3)</span>
+              <span>Connect YouTube Shorts (1-Click Google Login)</span>
             </h3>
             <button class="btn-icon-soft btn-close-modal"><i data-lucide="x"></i></button>
           </div>
           <div class="modal-body">
-            <div style="text-align:center; padding:4px 0 10px;">
-              <div style="width:48px; height:48px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; border:2px solid #fca5a5;">
-                <i data-lucide="youtube" style="width:26px; height:26px;"></i>
+            <div style="text-align:center; padding:4px 0 12px;">
+              <div style="width:52px; height:52px; border-radius:50%; background:#fef2f2; color:#ef4444; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; border:2px solid #fca5a5;">
+                <i data-lucide="youtube" style="width:28px; height:28px;"></i>
               </div>
-              <h4 style="font-size:1.15rem; font-weight:800; color:var(--text-primary);">YouTube চ্যানেল পরিবর্তন ও কনফিগারেশন</h4>
+              <h4 style="font-size:1.15rem; font-weight:800; color:var(--text-primary);">YouTube চ্যানেল কানেকশন</h4>
               <p style="font-size:0.82rem; color:var(--text-muted); margin-top:2px;">
-                আপনার পছন্দমতো যেকোনো YouTube চ্যানেল সিলেক্ট বা পরিবর্তন করুন।
+                কোনো জটিল কোড বা টোকেন ছাড়া সরাসরি ১-ক্লিকে Google দিয়ে কানেক্ট করুন।
               </p>
             </div>
 
             <!-- Current Connected Channel Preview Bar -->
-            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div style="background:var(--bg-subtle); border:1.5px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
               <div>
-                <div style="font-size:0.72rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">বর্তমানে সিলেক্টেড চ্যানেল:</div>
-                <div style="font-size:0.95rem; font-weight:800; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
-                  <span>${ytAccount?.channelTitle || 'chiku bd'}</span>
-                  <span style="font-size:0.8rem; font-weight:600; color:#FF0000;">(${ytAccount?.handle || '@chikubd'})</span>
+                <div style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;">সংযুক্ত চ্যানেল:</div>
+                <div style="font-size:1rem; font-weight:800; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+                  <span>${channelTitle}</span>
+                  <span style="font-size:0.82rem; font-weight:700; color:#FF0000;">(${channelHandle})</span>
                 </div>
-                ${ytAccount?.hasRefreshToken ? `
+                ${isConnected ? `
                   <div style="margin-top:4px;">
-                    <span style="font-size:0.72rem; color:#10B981; font-weight:700; display:inline-flex; align-items:center; gap:3px;">
+                    <span style="font-size:0.73rem; color:#10B981; font-weight:700; display:inline-flex; align-items:center; gap:4px; background:rgba(16, 185, 129, 0.1); padding:2px 8px; border-radius:12px;">
                       <i data-lucide="shield-check" style="width:12px; height:12px;"></i>
-                      <span>অটো-রিনিউ সক্রিয় (Auto-Renewal Active — টোকেন আর কখনোই আপডেট করতে হবে না!)</span>
+                      <span>✓ আজীবন অটো-রিনিউ সক্রিয় (টোকেন আর কখনোই দেওয়া লাগবে না)</span>
                     </span>
                   </div>
-                ` : ''}
+                ` : `
+                  <div style="margin-top:4px;">
+                    <span style="font-size:0.73rem; color:var(--text-muted); font-weight:600;">কানেক্ট করতে নিচের বাটনে চাপ দিন</span>
+                  </div>
+                `}
               </div>
-              <button type="button" class="btn btn-danger btn-sm" id="btn-modal-disconnect-yt" style="font-size:0.75rem; padding:5px 10px; gap:4px;">
-                <i data-lucide="trash-2" style="width:13px; height:13px;"></i> <span>Disconnect</span>
-              </button>
+              ${isConnected ? `
+                <button type="button" class="btn btn-outline btn-sm" id="btn-modal-disconnect-yt" style="font-size:0.75rem; padding:5px 10px; gap:4px; border-color:#ef4444; color:#ef4444;">
+                  <i data-lucide="log-out" style="width:13px; height:13px;"></i> <span>ডিসকানেক্ট</span>
+                </button>
+              ` : ''}
             </div>
 
-            <!-- 🌟 Option 1 (RECOMMENDED): 1-Click Google OAuth (Zero hassle, auto refresh) -->
-            <div style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.02)); border:2px solid #EF4444; border-radius:var(--radius-md); padding:14px 16px; margin-bottom:14px; box-shadow:0 4px 14px rgba(239, 68, 68, 0.12);">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <label style="font-size:0.86rem; font-weight:800; color:#991b1b; margin:0; display:flex; align-items:center; gap:6px;">
-                  <i data-lucide="zap" style="width:18px; height:18px; color:#EF4444;"></i>
-                  <span>পদ্ধতি ১ (সবচেয়ে সহজ): ১-ক্লিকে আজীবন অটো-রিনিউ কানেক্ট</span>
-                </label>
-                <span style="font-size:0.7rem; font-weight:700; background:#EF4444; color:#fff; padding:2px 8px; border-radius:12px;">রেকমেন্ডেড ⭐</span>
-              </div>
-              <div style="font-size:0.74rem; color:var(--text-secondary); margin-bottom:10px; line-height:1.4;">
-                কোনো জটিল কোড বা টোকেন কপি-পেস্ট করা ছাড়াই নিচের বাটনে চাপ দিন। গুগল অ্যাকাউন্ট সিলেক্ট করে পারমিশন দিলে <strong>সার্ভার নিজে থেকেই চিরস্থায়ী Refresh Token তৈরি করে সংরক্ষণ করবে!</strong>
-              </div>
-              <button class="btn btn-outline" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#fff; background:#FF0000; font-weight:700; padding:11px; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 2px 8px rgba(255,0,0,0.25);">
-                <i data-lucide="user-check"></i>
+            <!-- 🌟 Single Direct 1-Click Google Login Button -->
+            <div style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.02)); border:2px solid #EF4444; border-radius:var(--radius-md); padding:16px; margin-bottom:14px; box-shadow:0 4px 14px rgba(239, 68, 68, 0.12); text-align:center;">
+              <button class="btn btn-primary" id="btn-trigger-google-oauth" style="width:100%; border-color:#FF0000; color:#fff; background:#FF0000; font-size:1rem; font-weight:800; padding:12px; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 3px 10px rgba(255,0,0,0.3); border-radius:8px; cursor:pointer;">
+                <i data-lucide="play-circle" style="width:20px; height:20px;"></i>
                 <span>🔄 1-Click Google Login দিয়ে কানেক্ট করুন</span>
               </button>
-              <div style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-top:5px;">
-                💡 পপআপ আসলে আপনার মূল Gmail ইমেইল সিলেক্ট করবেন।
-              </div>
-            </div>
-
-            <!-- 🌟 Option 2: Permanent Google Refresh Token from OAuth Playground -->
-            <div style="background:linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.03)); border:2px solid #10b981; border-radius:var(--radius-md); padding:14px 16px; margin-bottom:14px; box-shadow:0 4px 14px rgba(16, 185, 129, 0.15);">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <label style="font-size:0.86rem; font-weight:800; color:#065f46; margin:0; display:flex; align-items:center; gap:6px;">
-                  <i data-lucide="shield-check" style="width:18px; height:18px; color:#10b981;"></i>
-                  <span>পদ্ধতি ২: চিরস্থায়ী Refresh Token (1//...) পেস্ট করুন:</span>
-                </label>
-                <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.74rem; color:#059669; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:700; background:rgba(16, 185, 129, 0.15); padding:3px 8px; border-radius:4px;">
-                  <span>OAuth Playground</span>
-                  <i data-lucide="external-link" style="width:11px; height:11px;"></i>
-                </a>
-              </div>
-              <div style="font-size:0.74rem; color:var(--text-secondary); margin-bottom:8px; line-height:1.4;">
-                Google OAuth Playground-এর Step 2-তে <strong>"Exchange authorization code for tokens"</strong> বাটনে পাওয়া <strong>Refresh token (যা <code style="font-weight:700; color:#065f46;">1//...</code> দিয়ে শুরু হয়)</strong> এখানে পেস্ট করুন:
-              </div>
-              <textarea class="form-input" id="modal-yt-refresh-token-input" rows="2" style="font-family:monospace; font-size:0.8rem; resize:vertical; border:1.5px solid #10b981;" placeholder="1//... (Google Refresh Token এখানে পেস্ট করুন)"></textarea>
-
-              <!-- Client ID & Secret for Refresh Token exchange with Auto-Fill & Copy -->
-              <div style="margin-top:10px; background:rgba(255,255,255,0.85); border:1px dashed #10b981; border-radius:6px; padding:8px 10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                  <div style="font-size:0.72rem; font-weight:700; color:#065f46; display:flex; align-items:center; gap:4px;">
-                    <i data-lucide="key" style="width:12px; height:12px;"></i>
-                    <span>OAuth Credentials (যে Client ID দিয়ে টোকেন নিয়েছেন):</span>
-                  </div>
-                  <button type="button" class="btn btn-outline btn-xs" id="btn-autofill-credentials" style="font-size:0.67rem; padding:2px 7px; border-color:#10b981; color:#047857; background:#ecfdf5; font-weight:700;">
-                    ⚡ সঠিক Credentials অটো-ফিল
-                  </button>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:4px;">
-                  <div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                      <label style="font-size:0.68rem; color:#047857; font-weight:600; margin:0;">Google Client ID:</label>
-                      <button type="button" class="btn btn-outline btn-xs" id="btn-copy-yt-client-id" style="font-size:0.62rem; padding:1px 5px; color:#047857;">📋 কপি ID</button>
-                    </div>
-                    <input type="text" class="form-input" id="modal-yt-client-id" value="${GoogleAuthService.getClientId() || ''}" placeholder="...apps.googleusercontent.com" style="font-size:0.72rem; padding:5px 8px; font-family:monospace; border:1px solid #6ee7b7;" />
-                  </div>
-                  <div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                      <label style="font-size:0.68rem; color:#047857; font-weight:600; margin:0;">Google Client Secret:</label>
-                      <button type="button" class="btn btn-outline btn-xs" id="btn-copy-yt-client-secret" style="font-size:0.62rem; padding:1px 5px; color:#047857;">📋 কপি Secret</button>
-                    </div>
-                    <input type="password" class="form-input" id="modal-yt-client-secret" value="${GoogleAuthService.getClientSecret() || ''}" placeholder="GOCSPX-..." style="font-size:0.72rem; padding:5px 8px; font-family:monospace; border:1px solid #6ee7b7;" />
-                  </div>
-                </div>
-                <div style="font-size:0.68rem; background:rgba(16, 185, 129, 0.12); border-left:3px solid #10b981; padding:5px 8px; border-radius:3px; margin-top:5px; color:#065f46; line-height:1.35;">
-                  ⚠️ <strong>OAuth Playground ব্যবহারের জরুরি নিয়ম:</strong> Playground-এর উপরে ডানদিকের ⚙️ <strong>Gear আইকন</strong>-এ ক্লিক করে <strong>"Use your own OAuth credentials"</strong> বক্সে টিক (✓) দিয়ে এই Client ID ও Secret বসিয়ে টোকেন নিলেই এটি কাজ করবে।
-                </div>
-              </div>
-
-              <div id="yt-refresh-token-verify-status" style="margin-top:8px; display:none;"></div>
-              <div style="margin-top:8px;">
-                <button type="button" class="btn btn-primary btn-sm" id="btn-save-yt-refresh-token" style="background:#059669; border-color:#059669; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:700; padding:9px;">
-                  <i data-lucide="check-circle-2"></i>
-                  <span>✓ চিরস্থায়ী Refresh Token সেভ ও সক্রিয় করুন</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- 🌟 Option 3: Standard Access Token Paste (Also accepts 1// tokens) -->
-            <div style="background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:14px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <label style="font-size:0.8rem; font-weight:700; color:var(--text-primary); margin:0;">
-                  Google OAuth Access Token বা Refresh Token:
-                </label>
-              </div>
-              <textarea class="form-input" id="modal-yt-token-input" rows="2" style="font-family:monospace; font-size:0.78rem; resize:vertical;" placeholder="ya29... (Access Token) অথবা 1//... (Refresh Token পেস্ট করুন)">${existingToken || ''}</textarea>
-              <div style="font-size:0.71rem; color:var(--text-muted); margin-top:4px;">
-                💡 এখানে <code style="font-weight:600;">1//...</code> দিয়ে শুরু হওয়া Refresh Token পেস্ট করলেও সিস্টেম স্বয়ংক্রিয়ভাবে সেটিকে চিরস্থায়ী টোকেন হিসেবে রিনিউ করে নেবে।
-              </div>
-              <div id="yt-token-verify-status" style="margin-top:8px; display:none;"></div>
-              <div style="display:flex; gap:8px; margin-top:8px;">
-                <button type="button" class="btn btn-primary btn-sm" id="btn-verify-save-yt-token" style="background:#FF0000; border-color:#FF0000; flex:1; display:flex; align-items:center; justify-content:center; gap:6px;">
-                  <i data-lucide="check-circle-2"></i>
-                  <span>টোকেন যাচাই ও সেভ করুন</span>
-                </button>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px; line-height:1.4;">
+                💡 বাটনে চাপ দিলে গুগলের অফিশিয়াল পপআপ আসবে — আপনার জিমেইল অ্যাকাউন্ট সিলেক্ট করলেই স্বয়ংক্রিয়ভাবে চ্যানেল কানেক্ট হয়ে যাবে। <strong>কোনো কোড বা টোকেন কপি-পেস্ট করতে হবে না!</strong>
               </div>
             </div>
 
@@ -2454,11 +2371,11 @@ class OmniFlowApp {
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
                   <div>
                     <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেলের নাম (Title)</label>
-                    <input type="text" class="form-input" id="input-custom-yt-title" value="${ytAccount?.channelTitle === 'md nahid' ? 'chiku bd' : (ytAccount?.channelTitle || 'chiku bd')}" placeholder="যেমন: chiku bd" style="font-size:0.82rem;" />
+                    <input type="text" class="form-input" id="input-custom-yt-title" value="${channelTitle}" placeholder="যেমন: chiku bd" style="font-size:0.82rem;" />
                   </div>
                   <div>
                     <label class="form-label" style="font-size:0.73rem; margin-bottom:4px;">চ্যানেল হ্যান্ডেল (@Handle)</label>
-                    <input type="text" class="form-input" id="input-custom-yt-handle" value="${ytAccount?.handle === '@mdnahid-du5ln' ? '@chikubd' : (ytAccount?.handle || '@chikubd')}" placeholder="যেমন: @chikubd" style="font-size:0.82rem;" />
+                    <input type="text" class="form-input" id="input-custom-yt-handle" value="${channelHandle}" placeholder="যেমন: @chikubd" style="font-size:0.82rem;" />
                   </div>
                 </div>
                 <div style="display:flex; gap:8px;">
@@ -2472,49 +2389,14 @@ class OmniFlowApp {
                 </div>
               </div>
             </details>
-
-            <!-- Advanced Google OAuth Client ID & Secret settings -->
-            <details style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:12px; background:var(--bg-subtle); border:1px solid var(--border-light); border-radius:var(--radius-md); padding:10px 14px;">
-              <summary style="cursor:pointer; font-weight:700; color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
-                <i data-lucide="key" style="width:13px; height:13px; color:#f59e0b;"></i>
-                <span>Google OAuth Credentials (Client ID ও Client Secret কনফিগারেশন)</span>
-              </summary>
-              <div style="margin-top:10px;">
-                <div style="font-size:0.73rem; color:var(--text-muted); margin-bottom:8px; line-height:1.4;">
-                  💡 Google OAuth Playground-এর ডানদিকের ⚙️ Gear আইকনে "Use your own OAuth credentials" চেক করে এই Client ID ও Secret পেস্ট করে Refresh Token সংগ্রহ করতে হয়।
-                </div>
-                <div style="margin-bottom:8px;">
-                  <label class="form-label" style="font-size:0.72rem; margin-bottom:2px;">Client ID:</label>
-                  <input type="text" class="form-input" id="input-oauth-client-id" value="${currentClientId || GoogleAuthService.getClientId()}" placeholder="Enter Client ID" style="font-size:0.75rem; font-family:var(--font-mono);" />
-                </div>
-                <div style="margin-bottom:8px;">
-                  <label class="form-label" style="font-size:0.72rem; margin-bottom:2px;">Client Secret:</label>
-                  <input type="text" class="form-input" id="input-oauth-client-secret" value="${GoogleAuthService.getClientSecret()}" placeholder="Enter Client Secret" style="font-size:0.75rem; font-family:var(--font-mono);" />
-                </div>
-                <button type="button" class="btn btn-outline btn-sm" id="btn-save-client-creds" style="font-size:0.75rem; padding:5px 12px;">
-                  <span>Credentials সেভ করুন</span>
-                </button>
-              </div>
-            </details>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-outline btn-close-modal">বাতিল</button>
+            <button class="btn btn-outline btn-close-modal">বন্ধ করুন</button>
           </div>
         </div>
       </div>
     `);
     this.refreshIcons();
-
-    const saveClientCredsBtn = document.getElementById('btn-save-client-creds');
-    if (saveClientCredsBtn) {
-      saveClientCredsBtn.addEventListener('click', () => {
-        const idVal = (document.getElementById('input-oauth-client-id')?.value || '').trim();
-        const secretVal = (document.getElementById('input-oauth-client-secret')?.value || '').trim();
-        if (idVal) GoogleAuthService.setClientId(idVal);
-        if (secretVal) GoogleAuthService.setClientSecret(secretVal);
-        this.showToast('Google OAuth Credentials Saved!', 'success');
-      });
-    }
 
     // Disconnect YouTube Channel from Modal
     const modalDisconnectBtn = document.getElementById('btn-modal-disconnect-yt');
@@ -2532,9 +2414,9 @@ class OmniFlowApp {
     const quickActivateBtn = document.getElementById('btn-quick-activate-yt');
     if (quickActivateBtn) {
       quickActivateBtn.addEventListener('click', () => {
-        let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
-        if (!ytAccount) {
-          ytAccount = {
+        let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
+        if (!ytAcc) {
+          ytAcc = {
             id: 'youtube',
             name: 'YouTube Shorts',
             icon: 'youtube',
@@ -2545,16 +2427,16 @@ class OmniFlowApp {
             connected: true,
             active: true
           };
-          project.socialAccounts.push(ytAccount);
+          project.socialAccounts.push(ytAcc);
         }
-        ytAccount.connected = true;
-        ytAccount.active = true;
-        ytAccount.handle = '@chikubd';
-        ytAccount.channelTitle = 'chiku bd';
-        ytAccount.channelId = 'UCCOo5jxEtLRgJQukBMnt-QQ';
-        ytAccount.followers = 'Active';
-        ytAccount.avatar = '';
-        ytAccount.lastPost = 'Ready';
+        ytAcc.connected = true;
+        ytAcc.active = true;
+        ytAcc.handle = '@chikubd';
+        ytAcc.channelTitle = 'chiku bd';
+        ytAcc.channelId = 'UCCOo5jxEtLRgJQukBMnt-QQ';
+        ytAcc.followers = 'Active';
+        ytAcc.avatar = '';
+        ytAcc.lastPost = 'Ready';
 
         if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
           project.scheduleSettings.targetPlatforms.push('youtube');
@@ -2575,9 +2457,9 @@ class OmniFlowApp {
         let handleVal = (document.getElementById('input-custom-yt-handle')?.value || '').trim() || '@chikubd';
         if (!handleVal.startsWith('@')) handleVal = '@' + handleVal;
 
-        let ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
-        if (!ytAccount) {
-          ytAccount = {
+        let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
+        if (!ytAcc) {
+          ytAcc = {
             id: 'youtube',
             name: 'YouTube Shorts',
             icon: 'youtube',
@@ -2585,16 +2467,16 @@ class OmniFlowApp {
             connected: true,
             active: true
           };
-          project.socialAccounts.push(ytAccount);
+          project.socialAccounts.push(ytAcc);
         }
-        ytAccount.connected = true;
-        ytAccount.active = true;
-        ytAccount.channelTitle = titleVal;
-        ytAccount.handle = handleVal;
-        ytAccount.channelId = ytAccount.channelId || 'UCCOo5jxEtLRgJQukBMnt-QQ';
-        ytAccount.followers = 'Active';
-        ytAccount.avatar = '';
-        ytAccount.lastPost = 'Ready';
+        ytAcc.connected = true;
+        ytAcc.active = true;
+        ytAcc.channelTitle = titleVal;
+        ytAcc.handle = handleVal;
+        ytAcc.channelId = ytAcc.channelId || 'UCCOo5jxEtLRgJQukBMnt-QQ';
+        ytAcc.followers = 'Active';
+        ytAcc.avatar = '';
+        ytAcc.lastPost = 'Ready';
 
         if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
           project.scheduleSettings.targetPlatforms.push('youtube');
@@ -2607,346 +2489,28 @@ class OmniFlowApp {
       });
     }
 
-    // Credentials Helper Buttons (Auto-Fill & Copy)
-    const btnAutoFill = document.getElementById('btn-autofill-credentials');
-    if (btnAutoFill) {
-      btnAutoFill.addEventListener('click', () => {
-        const idInput = document.getElementById('modal-yt-client-id');
-        const secInput = document.getElementById('modal-yt-client-secret');
-        const defId = GoogleAuthService.getClientId();
-        const defSec = GoogleAuthService.getClientSecret();
-        if (idInput) idInput.value = defId;
-        if (secInput) secInput.value = defSec;
-        GoogleAuthService.setClientId(defId);
-        GoogleAuthService.setClientSecret(defSec);
-        this.showToast('✓ সঠিক Google Credentials সফলভাবে অটো-ফিল করা হয়েছে!', 'success');
-      });
-    }
-
-    const btnCopyId = document.getElementById('btn-copy-yt-client-id');
-    if (btnCopyId) {
-      btnCopyId.addEventListener('click', async () => {
-        const val = (document.getElementById('modal-yt-client-id')?.value || GoogleAuthService.getClientId()).trim();
-        try {
-          await navigator.clipboard.writeText(val);
-          this.showToast('✓ Client ID কপি করা হয়েছে!', 'success');
-        } catch {
-          prompt('কপি করতে Ctrl+C চাপুন:', val);
-        }
-      });
-    }
-
-    const btnCopySec = document.getElementById('btn-copy-yt-client-secret');
-    if (btnCopySec) {
-      btnCopySec.addEventListener('click', async () => {
-        const val = (document.getElementById('modal-yt-client-secret')?.value || GoogleAuthService.getClientSecret()).trim();
-        try {
-          await navigator.clipboard.writeText(val);
-          this.showToast('✓ Client Secret কপি করা হয়েছে!', 'success');
-        } catch {
-          prompt('কপি করতে Ctrl+C চাপুন:', val);
-        }
-      });
-    }
-
-    // 1. Google 1-Click Button
-    document.getElementById('btn-trigger-google-oauth').addEventListener('click', async () => {
-      const btn = document.getElementById('btn-trigger-google-oauth');
-      let clientIdVal = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
-      let clientSecretVal = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
-      
-      if (!clientIdVal || clientIdVal.includes('18i1kra158') || clientIdVal.includes('489789622156') || !clientIdVal.includes('.apps.googleusercontent.com')) {
-        clientIdVal = GoogleAuthService.getClientId();
-      }
-      if (!clientSecretVal || clientSecretVal.includes('•') || clientSecretVal.includes('*') || clientSecretVal.includes('sQnCmjzGvvBwSS59DLfuDmLx1r24') || clientSecretVal.length < 10) {
-        clientSecretVal = GoogleAuthService.getClientSecret();
-      }
-      GoogleAuthService.setClientId(clientIdVal);
-      GoogleAuthService.setClientSecret(clientSecretVal);
-
-      btn.disabled = true;
-      btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Connecting to Google OAuth...';
-
-      try {
-        const result = await GoogleAuthService.connectYouTubeChannel(project);
-        this.closeModal();
-        this.showToast(`Connected YouTube: ${result.channel?.title || 'YouTube Channel'}!`, 'success');
-        this.render();
-      } catch (err) {
-        console.warn('Google OAuth error:', err);
-        btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="play-circle"></i> Try Again with Google';
+    // Google 1-Click Connect Button
+    const triggerGoogleBtn = document.getElementById('btn-trigger-google-oauth');
+    if (triggerGoogleBtn) {
+      triggerGoogleBtn.addEventListener('click', async () => {
+        triggerGoogleBtn.disabled = true;
+        triggerGoogleBtn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> <span>Google লগইন হচ্ছে...</span>';
         this.refreshIcons();
-        if (err.message && (err.message.includes('Service unavailable') || err.message.includes('servicestricted') || err.message.includes('restricted'))) {
-          alert(`Google Service Notice:\nGoogle পপআপে ব্র্যান্ড চ্যানেল নামের ওপর ক্লিক না করে আপনার মূল Gmail ইমেইল সিলেক্ট করুন।\n\nএছাড়াও Google Cloud-এ YouTube Data API v3 এনেবল করা থাকতে হবে।\n\nআপনি চাইলে সহজে "⚡ চ্যানেল chiku bd সচল রাখুন" বাটন বা Google OAuth Playground ব্যবহার করতে পারেন।`);
-        } else {
-          alert(`Google OAuth Notice:\n${err.message || 'Popup closed or origin not authorized'}\n\nআপনি চাইলে উপরের Google OAuth Playground লিংক থেকে সরাসরি Access Token কপি করে নিচে পেস্ট করতে পারেন।`);
-        }
-      }
-    });
-
-    // 2. Permanent Refresh Token Save Button
-    const saveRefreshBtn = document.getElementById('btn-save-yt-refresh-token');
-    if (saveRefreshBtn) {
-      saveRefreshBtn.addEventListener('click', async () => {
-        const refreshInput = (document.getElementById('modal-yt-refresh-token-input')?.value || '').trim();
-        const statusBox = document.getElementById('yt-refresh-token-verify-status');
-
-        if (!refreshInput) {
-          alert('অনুগ্রহ করে Google Refresh Token (starts with 1//...) পেস্ট করুন।');
-          return;
-        }
-
-        let clientIdInput = (document.getElementById('modal-yt-client-id')?.value || document.getElementById('input-oauth-client-id')?.value || '').trim();
-        let clientSecretInput = (document.getElementById('modal-yt-client-secret')?.value || document.getElementById('input-oauth-client-secret')?.value || '').trim();
-
-        // Auto-heal typos or missing credentials
-        if (!clientIdInput || clientIdInput.includes('18i1kra158') || clientIdInput.includes('489789622156') || !clientIdInput.includes('.apps.googleusercontent.com')) {
-          clientIdInput = GoogleAuthService.getClientId();
-          const el = document.getElementById('modal-yt-client-id');
-          if (el) el.value = clientIdInput;
-        }
-        if (!clientSecretInput || clientSecretInput.includes('•') || clientSecretInput.includes('*') || clientSecretInput.includes('sQnCmjzGvvBwSS59DLfuDmLx1r24') || clientSecretInput.length < 10) {
-          clientSecretInput = GoogleAuthService.getClientSecret();
-          const el = document.getElementById('modal-yt-client-secret');
-          if (el) el.value = clientSecretInput;
-        }
-
-        // Cache in browser storage for instant reuse
-        GoogleAuthService.setClientId(clientIdInput);
-        GoogleAuthService.setClientSecret(clientSecretInput);
-
-        saveRefreshBtn.disabled = true;
-        saveRefreshBtn.innerText = 'যাচাই ও অটো-রিনিউ সক্রিয় হচ্ছে...';
-
-        if (statusBox) {
-          statusBox.style.display = 'block';
-          statusBox.innerHTML = '<span style="font-size:0.78rem; color:var(--text-muted);">গুগল সার্ভারে Refresh Token যাচাই করা হচ্ছে...</span>';
-        }
 
         try {
-          const credOptions = {
-            clientId: clientIdInput,
-            clientSecret: clientSecretInput
-          };
-
-          const check = await GoogleAuthService.testYouTubeToken(refreshInput, credOptions);
-          GoogleAuthService.setYouTubeToken(project, '', refreshInput, credOptions);
-
-          const ch = check.channel || {
-            id: 'UCCOo5jxEtLRgJQUkBMnt-QQ',
-            title: 'chiku bd',
-            customUrl: '@chikubd-x5x'
-          };
-          let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
-          if (!ytAcc) {
-            ytAcc = { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', connected: true, active: true };
-            project.socialAccounts.push(ytAcc);
-          }
-          ytAcc.connected = true;
-          ytAcc.active = true;
-          ytAcc.hasRefreshToken = true;
-          ytAcc.tokenConfigured = true;
-          ytAcc.channelId = ch.id;
-          ytAcc.channelTitle = ch.title;
-          ytAcc.handle = ch.customUrl || `@${(ch.title || '').toLowerCase().replace(/\s+/g, '')}`;
-          ytAcc.lastPost = 'Ready';
-          if (ch.avatar) ytAcc.avatar = ch.avatar;
-
-          if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
-            project.scheduleSettings.targetPlatforms.push('youtube');
-          }
-
-          storage.saveState();
-
-          if (statusBox) {
-            statusBox.innerHTML = `
-              <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:700;">
-                ✓ চিরস্থায়ী Refresh Token সক্রিয়! চ্যানেল: <strong>${ch.title}</strong> &bull; অটো-রিনিউ চালু হয়েছে।
-              </div>
-            `;
-          }
-
-          this.showToast(`🎉 চিরস্থায়ী Refresh Token সক্রিয়! আর কখনোই আপডেট করা লাগবে না।`, 'success');
-          setTimeout(() => {
-            this.closeModal();
-            this.render();
-          }, 1200);
-        } catch (err) {
-          if (refreshInput.startsWith('1//')) {
-            let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
-            if (!ytAcc) {
-              ytAcc = { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', connected: true, active: true };
-              project.socialAccounts.push(ytAcc);
-            }
-            ytAcc.connected = true;
-            ytAcc.active = true;
-            ytAcc.hasRefreshToken = true;
-            ytAcc.tokenConfigured = true;
-            ytAcc.channelId = ytAcc.channelId || 'UCCOo5jxEtLRgJQUkBMnt-QQ';
-            ytAcc.channelTitle = ytAcc.channelTitle || 'chiku bd';
-            ytAcc.handle = ytAcc.handle || '@chikubd-x5x';
-            ytAcc.lastPost = 'Ready';
-            GoogleAuthService.setYouTubeToken(project, '', refreshInput, credOptions);
-            storage.saveState();
-
-            if (statusBox) {
-              statusBox.innerHTML = `
-                <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:700;">
-                  ✓ চিরস্থায়ী Refresh Token সক্রিয়! চ্যানেল: <strong>${ytAcc.channelTitle}</strong> &bull; অটো-রিনিউ চালু হয়েছে।
-                </div>
-              `;
-            }
-            this.showToast(`🎉 চিরস্থায়ী Refresh Token সক্রিয়! আর কখনোই আপডেট করা লাগবে না।`, 'success');
-            setTimeout(() => {
-              this.closeModal();
-              this.render();
-            }, 1200);
-            return;
-          }
-
-          saveRefreshBtn.disabled = false;
-          saveRefreshBtn.innerHTML = '<i data-lucide="check-circle-2"></i> <span>চিরস্থায়ী Refresh Token সেভ ও সক্রিয় করুন</span>';
-          this.refreshIcons();
-          if (statusBox) {
-            statusBox.innerHTML = `
-              <div style="background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.3); border-radius:6px; padding:10px 12px; font-size:0.78rem; color:#EF4444; font-weight:600; line-height:1.45;">
-                <div style="margin-bottom:6px;">❌ <strong>ত্রুটি:</strong> ${err.message}</div>
-                <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(239, 68, 68, 0.3);">
-                  <div style="color:var(--text-primary); font-size:0.75rem; margin-bottom:6px; font-weight:700;">👉 সবচেয়ে সহজ সমাধান (কোনো কোড ছাড়া):</div>
-                  <button type="button" class="btn btn-sm btn-primary" id="btn-err-1click-fallback" style="background:#EF4444; border-color:#EF4444; width:100%; font-weight:700; padding:7px;">
-                    🔄 ১-ক্লিকে Google Login দিয়ে চালু করুন
-                  </button>
-                </div>
-              </div>
-            `;
-            const fallbackBtn = document.getElementById('btn-err-1click-fallback');
-            if (fallbackBtn) {
-              fallbackBtn.addEventListener('click', () => {
-                document.getElementById('btn-trigger-google-oauth')?.click();
-              });
-            }
-          }
-        }
-      });
-    }
-
-    // 3. Token Verify & Save Button (with Auto 1// Detection)
-    document.getElementById('btn-verify-save-yt-token').addEventListener('click', async () => {
-      const tokenInput = (document.getElementById('modal-yt-token-input')?.value || '').trim();
-      const statusBox = document.getElementById('yt-token-verify-status');
-
-      if (!tokenInput) {
-        alert('অনুগ্রহ করে Google/YouTube Access Token পেস্ট করুন।');
-        return;
-      }
-
-      const btn = document.getElementById('btn-verify-save-yt-token');
-      btn.disabled = true;
-      btn.innerText = 'যাচাই হচ্ছে...';
-
-      if (statusBox) {
-        statusBox.style.display = 'block';
-        statusBox.innerHTML = '<span style="font-size:0.78rem; color:var(--text-muted);">YouTube Data API v3 এর সাথে যোগাযোগ করা হচ্ছে...</span>';
-      }
-
-      try {
-        const isRefreshToken = tokenInput.startsWith('1//');
-        const check = await GoogleAuthService.testYouTubeToken(tokenInput);
-
-        if (isRefreshToken) {
-          GoogleAuthService.setYouTubeToken(project, '', tokenInput);
-        } else {
-          GoogleAuthService.setYouTubeToken(project, tokenInput);
-        }
-
-        const ch = check.channel || {
-          id: 'UCCOo5jxEtLRgJQUkBMnt-QQ',
-          title: 'chiku bd',
-          customUrl: '@chikubd-x5x'
-        };
-        let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
-        if (!ytAcc) {
-          ytAcc = { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', connected: true, active: true };
-          project.socialAccounts.push(ytAcc);
-        }
-        ytAcc.connected = true;
-        ytAcc.active = true;
-        ytAcc.channelId = ch.id;
-        ytAcc.channelTitle = ch.title;
-        ytAcc.handle = ch.customUrl || `@${(ch.title || '').toLowerCase().replace(/\s+/g, '')}`;
-        ytAcc.accessToken = isRefreshToken ? (check.accessToken || '') : tokenInput;
-        ytAcc.token = ytAcc.accessToken;
-        if (isRefreshToken || check.hasRefreshToken) ytAcc.hasRefreshToken = true;
-        ytAcc.lastPost = 'Ready';
-        if (ch.avatar) ytAcc.avatar = ch.avatar;
-
-        if (!project.scheduleSettings.targetPlatforms.includes('youtube')) {
-          project.scheduleSettings.targetPlatforms.push('youtube');
-        }
-
-        storage.saveState();
-
-        if (statusBox) {
-          statusBox.innerHTML = `
-            <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:600;">
-              ✓ চ্যানেল ভেরিফাইড: <strong>${ch.title}</strong> (${ch.id}) &bull; ${isRefreshToken ? 'চিরস্থায়ী অটো-রিনিউ সক্রিয়' : `${ch.subscribers || '8.5K'} সাবস্ক্রাইবার`}
-            </div>
-          `;
-        }
-
-        this.showToast(isRefreshToken ? `🎉 চিরস্থায়ী Refresh Token সক্রিয়! আর কখনো আপডেট করা লাগবে না।` : `🎉 YouTube চ্যানেল "${ch.title}" সফলভাবে সংযুক্ত হয়েছে!`, 'success');
-        setTimeout(() => {
+          const result = await GoogleAuthService.connectYouTubeChannel(project);
           this.closeModal();
+          this.showToast(`🎉 YouTube চ্যানেল "${result.channel?.title || 'chiku bd'}" সফলভাবে কানেক্ট হয়েছে!`, 'success');
           this.render();
-        }, 1200);
-
-      } catch (err) {
-        if (tokenInput.startsWith('1//')) {
-          let ytAcc = project.socialAccounts.find(a => a.id === 'youtube');
-          if (!ytAcc) {
-            ytAcc = { id: 'youtube', name: 'YouTube Shorts', icon: 'youtube', color: '#FF0000', connected: true, active: true };
-            project.socialAccounts.push(ytAcc);
-          }
-          ytAcc.connected = true;
-          ytAcc.active = true;
-          ytAcc.hasRefreshToken = true;
-          ytAcc.tokenConfigured = true;
-          ytAcc.channelId = ytAcc.channelId || 'UCCOo5jxEtLRgJQUkBMnt-QQ';
-          ytAcc.channelTitle = ytAcc.channelTitle || 'chiku bd';
-          ytAcc.handle = ytAcc.handle || '@chikubd-x5x';
-          ytAcc.lastPost = 'Ready';
-          GoogleAuthService.setYouTubeToken(project, '', tokenInput);
-          storage.saveState();
-
-          if (statusBox) {
-            statusBox.innerHTML = `
-              <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#10B981; font-weight:600;">
-                ✓ চ্যানেল ভেরিফাইড: <strong>${ytAcc.channelTitle}</strong> &bull; চিরস্থায়ী অটো-রিনিউ সক্রিয়
-              </div>
-            `;
-          }
-          this.showToast(`🎉 চিরস্থায়ী Refresh Token সক্রিয়! আর কখনো আপডেট করা লাগবে না।`, 'success');
-          setTimeout(() => {
-            this.closeModal();
-            this.render();
-          }, 1200);
-          return;
+        } catch (err) {
+          console.warn('Google OAuth error:', err);
+          triggerGoogleBtn.disabled = false;
+          triggerGoogleBtn.innerHTML = '<i data-lucide="play-circle"></i> <span>🔄 আবার চেষ্টা করুন</span>';
+          this.refreshIcons();
+          alert(`Google লগইন নোটিশ:\n${err.message || 'পপআপ বন্ধ করা হয়েছে বা পারমিশন দেওয়া হয়নি।'}\n\nঅনুগ্রহ করে আবার বাটনে চাপ দিয়ে আপনার জিমেইল অ্যাকাউন্ট সিলেক্ট করুন।`);
         }
-
-        btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="check-circle-2"></i> <span>টোকেন যাচাই ও সেভ করুন</span>';
-        this.refreshIcons();
-
-        if (statusBox) {
-          statusBox.innerHTML = `
-            <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:6px 10px; font-size:0.78rem; color:#EF4444;">
-              ⚠ ত্রুটি: ${err.message}
-            </div>
-          `;
-        }
-      }
-    });
+      });
+    }
   }
 
   // --- VIDEO PLAYER MODAL ---
@@ -4187,31 +3751,7 @@ class OmniFlowApp {
                 </button>
               </div>
 
-              <!-- Collapsible Token Settings (Only if user ever wants to modify) -->
-              <details style="margin-top:10px; font-size:0.76rem;">
-                <summary style="cursor:pointer; color:var(--text-muted); font-weight:600;">⚙️ টোকেন পরিবর্তন বা আপডেট করতে চাইলে এখানে ক্লিক করুন (ঐচ্ছিক)</summary>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; margin-bottom:4px;">
-                  <label style="font-size:0.78rem; font-weight:600; color:var(--text-primary); margin:0;">
-                    Google / YouTube Access Token:
-                  </label>
-                  <a href="https://developers.google.com/oauthplayground/#step1&apisSelect=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%2Chttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem; color:#FF0000; text-decoration:none; display:flex; align-items:center; gap:3px; font-weight:600;">
-                    <span>OAuth Playground</span>
-                    <i data-lucide="external-link" style="width:11px; height:11px;"></i>
-                  </a>
-                </div>
-
-                <div style="display:flex; gap:6px;">
-                  <input type="text" class="form-input" id="quick-youtube-token" value="${ytDisplayToken}" placeholder="ya29... বা 1//... (Google Access / Refresh Token)" style="font-family:monospace; font-size:0.8rem; flex:1;" />
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-modal-test-youtube" style="border-color:#FF0000; color:#FF0000; font-size:0.78rem; white-space:nowrap;">
-                    টোকেন টেস্ট
-                  </button>
-                </div>
-
-                <div id="modal-yt-verify-status" style="margin-top:6px; display:none;"></div>
-              </details>
-            </div>
-
-            <!-- Primary Action Buttons -->
+              <!-- Primary Action Buttons -->
             <div style="display:flex; gap:10px; margin-top:14px;">
               <button class="btn btn-primary" id="btn-submit-token-and-publish" style="flex:1; background:linear-gradient(135deg, #1877F2, #FF0000); border:none; padding:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-weight:700;">
                 <i data-lucide="rocket"></i>
@@ -4374,59 +3914,6 @@ class OmniFlowApp {
       });
     }
 
-    // Test YouTube Token
-    const testYtBtn = document.getElementById('btn-modal-test-youtube');
-    if (testYtBtn) {
-      testYtBtn.addEventListener('click', async () => {
-        const val = (document.getElementById('quick-youtube-token')?.value || '').trim();
-        const statusBox = document.getElementById('modal-yt-verify-status');
-        if (!val) {
-          alert('অনুগ্রহ করে Google/YouTube Access Token দিন।');
-          return;
-        }
-        testYtBtn.disabled = true;
-        testYtBtn.innerText = 'যাচাই...';
-        if (statusBox) {
-          statusBox.style.display = 'block';
-          statusBox.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">YouTube Data API v3 যাচাই হচ্ছে...</span>';
-        }
-
-        try {
-          const testRes = await GoogleAuthService.testYouTubeToken(val);
-          GoogleAuthService.setYouTubeToken(project, val);
-          storage.saveState();
-          const ch = testRes.channel || { title: 'chiku bd', id: 'UCCOo5jxEtLRgJQUkBMnt-QQ' };
-          const isPermanent = val.startsWith('1//') || testRes.hasRefreshToken;
-          const badge = document.getElementById('modal-yt-badge');
-          if (badge) {
-            badge.className = 'badge badge-success';
-            badge.textContent = isPermanent ? `✓ আজীবন অটো-রিনিউ সক্রিয় (${ch.title})` : `OAuth Ready (${ch.title})`;
-          }
-          const ytCheckbox = document.getElementById('modal-target-youtube');
-          if (ytCheckbox) ytCheckbox.checked = true;
-          if (statusBox) {
-            statusBox.innerHTML = `
-              <div style="background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:4px; padding:4px 8px; font-size:0.76rem; color:#10B981; font-weight:600;">
-                ✓ ${isPermanent ? 'চিরস্থায়ী Refresh Token সক্রিয়' : 'ভেরিফাইড চ্যানেল'}: <strong>${ch.title}</strong> &bull; ${isPermanent ? 'টোকেন আর কখনোই দেওয়া লাগবে না!' : 'Shorts Ready'}
-              </div>
-            `;
-          }
-          this.showToast(`YouTube চ্যানেল "${ch.title}" ভেরিফাইড!`, 'success');
-        } catch (err) {
-          if (statusBox) {
-            statusBox.innerHTML = `
-              <div style="background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; padding:4px 8px; font-size:0.76rem; color:#EF4444;">
-                ⚠ ত্রুটি: ${err.message}
-              </div>
-            `;
-          }
-        } finally {
-          testYtBtn.disabled = false;
-          testYtBtn.innerText = 'টোকেন টেস্ট';
-        }
-      });
-    }
-
     // Google OAuth Connect
     const googleBtn = document.getElementById('btn-modal-connect-google');
     if (googleBtn) {
@@ -4444,7 +3931,7 @@ class OmniFlowApp {
           if (ytCheckbox) ytCheckbox.checked = true;
           this.showToast('🎉 YouTube চ্যানেল আজীবন অটো-রিনিউ সহ কানেক্ট হয়েছে!', 'success');
         } catch (e) {
-          alert(`Google OAuth: ${e.message}\nআপনি চাইলে সরাসরি Google Access Token পেস্ট করতে পারেন।`);
+          alert(`Google লগইন নোটিশ:\n${e.message || "পপআপ বন্ধ করা হয়েছে বা পারমিশন দেওয়া হয়নি।"}\n\nআবার চেষ্টা করতে বাটনে চাপ দিন।`);
         } finally {
           googleBtn.disabled = false;
           googleBtn.innerHTML = '<i data-lucide="play-circle"></i> <span>Google OAuth 1-Click Connect</span>';
