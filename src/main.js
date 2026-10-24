@@ -996,11 +996,13 @@ class OmniFlowApp {
         </div>
       </div>
 
-      <div class="alert-box alert-info">
-        <i data-lucide="shield-check" style="width:24px; height:24px; flex-shrink:0;"></i>
+      <div class="alert-box alert-info" style="background:rgba(16, 185, 129, 0.08); border-color:rgba(16, 185, 129, 0.3);">
+        <i data-lucide="shield-check" style="width:24px; height:24px; flex-shrink:0; color:#10b981;"></i>
         <div class="alert-content">
-          <h4>Two-Way Channel Control</h4>
-          <p>Easily toggle any connected channel active or paused. Videos will only be published to channels that are toggled <strong>Active</strong>.</p>
+          <h4 style="color:#065f46;">একক কেন্দ্রীয় সোশ্যাল মিডিয়া নিয়ন্ত্রণ (Single-Point Global Connection)</h4>
+          <p style="color:var(--text-secondary);">
+            এখানে একবার চ্যানেল কানেক্ট করলেই তা সম্পূর্ণ প্রজেক্টে আজীবনের জন্য যুক্ত থাকবে। ভিডিও পাবলিশ বা আপলোডের সময় আর কোথাও নতুন করে কানেক্ট করতে হবে না।
+          </p>
         </div>
       </div>
 
@@ -3619,18 +3621,60 @@ class OmniFlowApp {
     // Social Events
     const connectAllChannels = document.getElementById('btn-connect-all-channels');
     if (connectAllChannels) {
-      connectAllChannels.addEventListener('click', () => {
+      connectAllChannels.addEventListener('click', async () => {
         const project = storage.getActiveProject();
         SocialManagerService.connectAllPlatforms(project);
         storage.saveState();
-        this.showToast('All 6 channels connected with 1-click!', 'success');
+
+        const ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
+        if (!ytAccount?.hasRefreshToken) {
+          try {
+            const res = await GoogleAuthService.connectYouTubeChannel(project);
+            this.showToast(`🎉 YouTube চ্যানেল "${res.channel?.title || 'chiku bd'}" ১-ক্লিকে সফলভাবে কানেক্ট হয়েছে!`, 'success');
+          } catch (e) {
+            this.showToast('সমস্ত চ্যানেল সক্রিয় করা হয়েছে!', 'success');
+          }
+        } else {
+          this.showToast('সমস্ত চ্যানেল সফলভাবে সক্রিয় করা হয়েছে!', 'success');
+        }
         this.render();
       });
     }
 
     document.querySelectorAll('.btn-connect-platform').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const platId = btn.getAttribute('data-platform-id');
+        const project = storage.getActiveProject();
+
+        if (platId === 'youtube') {
+          const ytAccount = project.socialAccounts.find(a => a.id === 'youtube');
+          // If already connected and user clicks "চ্যানেল পরিবর্তন", open settings modal
+          if (ytAccount?.connected && ytAccount?.hasRefreshToken) {
+            this.openYouTubeOAuthModal(AVAILABLE_PLATFORMS.find(p => p.id === 'youtube'));
+            return;
+          }
+
+          // Direct 1-Click Google Login without intermediate steps
+          const origHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = '<i data-lucide="loader-2" class="spin"></i> <span>গুগল লগইন হচ্ছে...</span>';
+          this.refreshIcons();
+
+          try {
+            const result = await GoogleAuthService.connectYouTubeChannel(project);
+            this.showToast(`🎉 YouTube চ্যানেল "${result.channel?.title || 'chiku bd'}" সফলভাবে কানেক্ট হয়েছে! আর কোথাও কানেক্ট করতে হবে না।`, 'success');
+            this.render();
+          } catch (err) {
+            console.warn('[SocialConnect] Direct Google OAuth note:', err);
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            this.refreshIcons();
+            // If direct popup was blocked or failed, open modal as graceful fallback
+            this.openYouTubeOAuthModal(AVAILABLE_PLATFORMS.find(p => p.id === 'youtube'));
+          }
+          return;
+        }
+
         this.openSocialConnectModal(platId);
       });
     });
