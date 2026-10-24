@@ -1064,8 +1064,8 @@ class OmniFlowApp {
                 </div>
 
                 ${platformDef.id === 'youtube' && account.connected ? `
-                  <div style="margin-top:10px; padding:6px 10px; background:rgba(255, 0, 0, 0.05); border:1px solid rgba(255, 0, 0, 0.15); border-radius:6px; font-size:0.75rem; color:#dc2626; display:flex; justify-content:space-between; align-items:center;">
-                    <span>Auth: <strong>${account.hasRefreshToken ? 'Server Offline Refresh Active' : 'Access Token Configured'}</strong></span>
+                  <div style="margin-top:10px; padding:6px 10px; background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.25); border-radius:6px; font-size:0.75rem; color:#047857; display:flex; justify-content:space-between; align-items:center;">
+                    <span>✓ Auth: <strong>${account.hasRefreshToken ? 'অটো-রিনিউ সক্রিয় (Active)' : 'Access Token Configured'}</strong></span>
                     <span style="font-weight:600;">${account.expiresAt ? `Token: ${new Date(account.expiresAt).toLocaleDateString()}` : 'Server Vault'}</span>
                   </div>
                 ` : ''}
